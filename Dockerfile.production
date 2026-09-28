@@ -1,0 +1,14 @@
+FROM php:8.3-fpm-alpine
+RUN apk add --no-cache libpq-dev oniguruma-dev icu-dev libxml2-dev \
+    && docker-php-ext-install pdo_pgsql mbstring intl dom xml opcache
+RUN apk add --no-cache unzip icu-data-full
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+WORKDIR /var/www/html
+COPY . .
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
+    && mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data storage/logs \
+    && chmod -R a+rX /var/www/html \
+    && chown -R www-data:www-data storage bootstrap/cache
+USER www-data
+EXPOSE 9000
+CMD ["php-fpm"]

@@ -1,0 +1,81 @@
+# Run independently: docker compose --env-file .env.production -f docker-compose.production.yml ...
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile.production
+  env_file: .env.production
+  restart: unless-stopped
+  volumes:
+    - uploads:/var/www/html/storage/app/public
+  networks: [frontend, backend]
+  depends_on:
+    postgres:
+      condition: service_healthy
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "5"}
+services:
+  app:
+    <<: *app
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./public:/var/www/html/public:ro
+      - uploads:/var/www/html/public/storage:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [frontend]
+    depends_on: [app]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-dosmart}
+      POSTGRES_USER: ${DB_USERNAME:-dosmart}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set a unique DB_PASSWORD}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${DB_DATABASE:-dosmart}
+      PGUSER: ${DB_USERNAME:-dosmart}
+      PGPASSWORD: ${DB_PASSWORD:?Set a unique DB_PASSWORD}
+    volumes:
+      - ./docker/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c", "while true; do /bin/sh /backup.sh; sleep 86400; done"]
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+networks:
+  frontend:
+  backend:
+    internal: true
+volumes:
+  postgres_data:
+  uploads:
+  caddy_data:
+  caddy_config:
