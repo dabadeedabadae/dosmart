@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\InstitutionController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Shop\ShopController;
 
@@ -49,6 +50,8 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
 
     Route::resource('products', ProductController::class)->except(['show']);
     Route::resource('categories', CategoryController::class)->except(['show']);
+    Route::patch('/institutions/{institution}/activity', [InstitutionController::class, 'updateActivity'])->name('institutions.activity');
+    Route::resource('institutions', InstitutionController::class)->except(['show']);
 
     Route::get('/report', [ReportController::class, 'index'])->name('report');
 });

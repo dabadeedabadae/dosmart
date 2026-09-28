@@ -1,58 +1,387 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# DoSmart — магазин, заявки и админка
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Бэкенд на Laravel 13 / PHP 8.3+, сайт магазина и панель сотрудников. Этот репозиторий не содержит Flutter-приложение терминала: оно находится отдельно в `CyrillBalyuk/flutter-internal`.
 
-## About Laravel
+## Как работает заказ
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+1. Осуждённый собирает корзину в приложении терминала, вводит ФИО, учреждение и WhatsApp родственника, подтверждает передачу данных.
+2. Заявка с товарами попадает в админку со статусом **«Новая заявка»**. Повтор отправки с тем же идентификатором не создаёт второй заказ.
+3. Сотрудник связывается с родственником, уточняет данные и согласует доставку.
+4. Сотрудник выбирает доставку: обычная — 3 000 ₸, срочная — 5 000 ₸, переводит заказ в **«Ожидает оплаты»** и отправляет ссылку из карточки заказа.
+5. Сотрудник сверяет платёж в Kaspi Pay и вручную подтверждает оплату. Затем отмечает доставку или возврат.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Отправка сообщений и проверка оплаты не автоматизированы. Кнопка WhatsApp открывает подготовленный текст; сотрудник сам отправляет сообщение. Предыдущий сценарий оформления родственником по коду сохранён для старых ссылок и сайта.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Какой способ запуска выбрать
 
-## Learning Laravel
+| Задача | Способ |
+| --- | --- |
+| Посмотреть сайт и админку на Windows, macOS или Linux | PHP + Composer + SQLite, раздел 1 |
+| Разместить тестовый или рабочий сайт в интернете | Linux-сервер + Docker Compose, раздел 2 |
+| Подключить APK терминала | Дополнительно выполнить раздел 3 |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Команды выполняются из папки репозитория, если не указано другое. Папка после клонирования называется `dosmart`; при другом имени используйте своё.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 1. Запуск на обычном компьютере
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+### Требования
 
-## Agentic Development
+Установите Git, PHP 8.3 или совместимую более новую версию, Composer 2. Они должны быть доступны в терминале через `PATH`.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Для PHP нужны стандартные расширения Laravel: `ctype`, `curl`, `dom`, `fileinfo`, `filter`, `hash`, `mbstring`, `openssl`, `pcre`, `PDO`, `session`, `tokenizer`, `xml`; для локальной базы — `pdo_sqlite` и `sqlite3`. Composer сообщит, если не хватает обязательного расширения. Для тестов также нужны расширения, перечисленные установленным PHPUnit.
 
-```bash
-composer require laravel/boost --dev
+- **Windows:** используйте PowerShell; проверьте расширения в активном `php.ini`. Для `storage:link` может потребоваться режим разработчика Windows или запуск терминала с правами администратора.
+- **macOS / Linux:** используйте обычный терминал. Папки `storage` и `bootstrap/cache` должны быть доступны на запись текущему пользователю.
 
-php artisan boost:install
+```text
+php -v
+php --ini
+php -m
+composer --version
+git --version
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### Скачать и установить
 
-## Contributing
+```bash
+git clone https://github.com/dabadeedabadae/dosmart.git
+cd dosmart
+php -r "file_exists('.env') || copy('.env.example', '.env');"
+composer install
+php artisan key:generate
+php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Если репозиторий закрытый, сначала настройте доступ GitHub. Вместо HTTPS можно использовать `git clone git@github.com:dabadeedabadae/dosmart.git`.
 
-## Code of Conduct
+Откройте `.env` текстовым редактором и задайте:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```dotenv
+APP_NAME=DoSmart
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://127.0.0.1:8088
+APP_LOCALE=ru
+DB_CONNECTION=sqlite
+SESSION_DRIVER=database
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+```
 
-## Security Vulnerabilities
+Сохраните значение `APP_KEY`, созданное командой выше. Для SQLite **не задавайте `DB_DATABASE`**: проект сам использует `database/database.sqlite`. Удалите старые значения `DB_URL` и `DB_DATABASE`, если переносите настройки из другого окружения. `SESSION_SECURE_COOKIE` локально по HTTP должен быть `false` либо отсутствовать.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan config:clear
+php artisan migrate
+php artisan storage:link
+php artisan admin:create operator
+```
 
-## License
+Команда создания сотрудника спросит пароль дважды. Минимум — 12 символов. Общей учётной записи или стандартного пароля нет.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Для **новой пустой локальной базы** можно один раз добавить демонстрационные категории, учреждения и товары:
+
+```bash
+php artisan db:seed
+```
+
+Повторно сидер не запускайте: он добавляет записи, а не синхронизирует каталог. На рабочем сервере товары и категории лучше заполнить через админку.
+
+Запустите сайт:
+
+```bash
+php artisan serve --host=127.0.0.1 --port=8088
+```
+
+Оставьте терминал открытым. Остановка — `Ctrl+C`.
+
+| Страница | Адрес |
+| --- | --- |
+| Магазин | http://127.0.0.1:8088/shop |
+| Вход сотрудника | http://127.0.0.1:8088/admin/login |
+| Заказы | http://127.0.0.1:8088/admin/orders |
+| Вход покупателя по телефону | http://127.0.0.1:8088/shop/login |
+
+В другом терминале можно запустить планировщик:
+
+```bash
+php artisan schedule:work
+```
+
+Он ежедневно удаляет просроченные неоформленные черновики. Полученные заявки с заказом сохраняются. Для краткого просмотра интерфейса планировщик не обязателен.
+
+### Нужен ли Node.js
+
+Текущие страницы магазина и админки используют Blade и не подключают Vite через `@vite`; для их запуска Node.js не требуется. Если дорабатываете ресурсы Vite, установите совместимый с `package.json` Node.js, затем используйте `npm install` и `npm run build`. Не используйте `npm ci`, пока в репозитории нет `package-lock.json`.
+
+### Доступ с другого компьютера или телефона
+
+`127.0.0.1` доступен только на том устройстве, где открыт браузер. Для просмотра сайта в своей локальной сети:
+
+```bash
+php artisan serve --host=0.0.0.0 --port=8088
+```
+
+Укажите в `.env` `APP_URL=http://IP_КОМПЬЮТЕРА:8088`, выполните `php artisan config:clear`, разрешите входящие подключения к порту 8088 в локальной сети. Устройства должны находиться в одной сети. В браузере телефона откройте этот IP.
+
+Встроенный PHP-сервер предназначен для разработки. Для публичного доступа используйте серверный вариант ниже. APK терминала предъявляет более строгие требования к HTTPS — см. раздел 3.
+
+## 2. Развёртывание на Linux-сервере
+
+В проекте уже есть `Dockerfile.production`, `docker-compose.production.yml`, Caddy и скрипт резервного копирования. PHP и PostgreSQL устанавливаются внутри контейнеров; PHP/Composer на сервере отдельно не нужны.
+
+### Подготовка сервера
+
+Нужны Git, Docker Engine с Docker Compose v2, домен и доступ по SSH. Следующие команды рассчитаны на Bash в Linux.
+
+```bash
+docker --version
+docker compose version
+```
+
+Настройте DNS-запись `A` домена на IPv4 сервера. Запись `AAAA` используйте только при настроенном IPv6. Откройте TCP-порты 80 и 443; UDP 443 используется для HTTP/3. SSH оставьте доступным по вашему настроенному порту. Порт PostgreSQL наружу открывать не нужно.
+
+Caddy автоматически получает HTTPS-сертификат, когда домен указывает на сервер и порты доступны. Порты 80/443 не должны быть заняты другим веб-сервером. Для тестового сервера можно использовать отдельный поддомен.
+
+### Скачать проект и заполнить настройки
+
+```bash
+git clone https://github.com/dabadeedabadae/dosmart.git
+cd dosmart
+cp .env.production.example .env.production
+chmod 600 .env.production
+mkdir -p backups
+```
+
+Создавайте файл из примера только при первой установке: при обновлении существующий `.env.production` сохраняйте.
+
+Откройте `.env.production` и заполните:
+
+```dotenv
+APP_NAME=DoSmart
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://dos-mart.kz
+SITE_DOMAIN=dos-mart.kz
+APP_KEY=
+APP_LOCALE=ru
+DB_CONNECTION=pgsql
+DB_HOST=postgres
+DB_PORT=5432
+DB_DATABASE=dosmart
+DB_USERNAME=dosmart
+DB_PASSWORD=ЗАМЕНИТЬ_НА_СЛУЧАЙНЫЙ_ПАРОЛЬ
+SESSION_DRIVER=database
+SESSION_SECURE_COOKIE=true
+SESSION_ENCRYPT=true
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+LOG_CHANNEL=stderr
+LOG_LEVEL=warning
+TERMINAL_IDENTITY_URL=
+KASPI_PAYMENT_URL=
+DOSMART_WHATSAPP=
+```
+
+`dos-mart.kz` здесь — пример, замените домен на свой в **обоих** полях. `SITE_DOMAIN` указывается без протокола и пути, `APP_URL` — с `https://`. Остальные поля из примера можно оставить.
+
+Для `DB_PASSWORD` подойдёт случайная строка, например результат `openssl rand -hex 32`. Не используйте пароль из этого README. После инициализации PostgreSQL простая замена `DB_PASSWORD` в файле не меняет пароль пользователя в существующей базе.
+
+Далее определите короткую команду для этого Compose-файла:
+
+```bash
+dc() { docker compose --env-file .env.production -f docker-compose.production.yml "$@"; }
+```
+
+Функция действует в текущем Bash-терминале. После повторного входа по SSH определите её снова, находясь в папке проекта. Все дальнейшие `dc ...` эквивалентны полной команде `docker compose --env-file .env.production -f docker-compose.production.yml ...`.
+
+### Сборка и первый запуск
+
+```bash
+dc build app scheduler
+dc run --rm --no-deps app php -r 'echo "base64:".base64_encode(random_bytes(32)).PHP_EOL;'
+```
+
+Вставьте выведенную строку целиком в `APP_KEY` файла `.env.production`. Ключ генерируется **один раз**; при обновлениях не меняйте его и храните вместе с резервной копией настроек. Команда только выводит ключ, сама файл не изменяет.
+
+```bash
+dc up -d postgres
+dc run --rm app php artisan migrate --force
+dc run --rm app php artisan admin:create operator
+dc up -d --build
+dc ps
+```
+
+Создание сотрудника интерактивное: введите собственный пароль. В production-командах **не выполняйте `db:seed` автоматически**. Загрузите свой каталог через админку.
+
+Проверка:
+
+```bash
+curl -I https://dos-mart.kz/shop
+dc logs --tail=100 app scheduler web backup
+```
+
+Подставьте свой домен. Откройте `/admin/login`, войдите созданным сотрудником. HTTPS может появиться не сразу, если DNS ещё не обновился; причину выдачи сертификата смотрите в логах `web`.
+
+### Что запускает Compose
+
+| Сервис | Назначение |
+| --- | --- |
+| `app` | Laravel через PHP-FPM |
+| `web` | Caddy: HTTPS, статические файлы, передача запросов в PHP |
+| `postgres` | PostgreSQL 16 во внутренней сети, без опубликованного порта |
+| `scheduler` | Ежедневная очистка неоформленных черновиков |
+| `backup` | Дамп PostgreSQL при старте и каждые 24 часа |
+
+Загруженные фотографии хранятся в томе `uploads`, база — в `postgres_data`, сертификаты Caddy — в `caddy_data`. Контейнеры настроены на перезапуск `unless-stopped`; для старта после перезагрузки машины должен запускаться сам Docker. Очередь задач отдельным worker-сервисом не обслуживается: текущая обработка заявок синхронная. Если добавите фоновые задания, потребуется worker.
+
+Используйте production-файл явно. Обычный `docker-compose.yml` — отдельная конфигурация разработки с другими именами сервисов, портами и настройками; не смешивайте её с этой инструкцией.
+
+### Обновление существующего сервера
+
+Сначала сделайте бэкап. Команды не пересоздают базу и не запускают демонстрационные сидеры.
+
+```bash
+dc exec backup sh /backup.sh
+git pull --ff-only
+dc build app scheduler
+dc stop web scheduler
+dc up -d --no-deps app
+dc exec app php artisan migrate --force
+dc up -d
+dc ps
+dc logs --tail=100 app scheduler web
+```
+
+Пауза `web` нужна, чтобы пользователи не работали со схемой во время миграций. Если сборка или миграция завершилась ошибкой, остановитесь на этом шаге и разберите лог. Не продолжайте команды вслепую. После миграции проверьте `/shop`, вход сотрудника, список заявок и карточку заказа.
+
+Образ содержит PHP-код; после изменения кода нужен `build`, а не только `restart`. После изменения `.env.production` пересоздайте процессы приложения:
+
+```bash
+dc up -d --force-recreate app scheduler
+```
+
+Если меняли домен, пересоздайте и `web`. Инструкция не включает `config:cache` внутри работающего контейнера: такой кэш теряется при пересоздании, а старый кэш может мешать применению новых настроек.
+
+Не используйте `php artisan migrate:fresh`, `db:wipe` или `docker compose down -v` на сервере с нужными данными. Миграции после 28.09.2026 добавляют поле для защиты от повторных заявок; их тоже нужно применить обычным `migrate --force`.
+
+### Резервные копии и восстановление
+
+Дампы находятся в `backups/`, полные файлы имеют расширение `.dump`. Скрипт проверяет читаемость архива и удаляет свои дампы старше 14 дней. Файлы `.partial` не являются готовыми бэкапами. Ошибки смотрите в логах `backup`.
+
+Ручной дамп БД и копия загруженных файлов:
+
+```bash
+dc exec backup sh /backup.sh
+dc exec -T app tar -czf - -C /var/www/html/storage/app/public . > "backups/uploads-$(date +%Y%m%d-%H%M%S).tar.gz"
+```
+
+Копируйте дампы, архивы фотографий и `.env.production` на отдельный защищённый носитель или сервер. Автоматический сервис сохраняет только БД; фотографии и файл настроек нужно резервировать отдельно. Архивы фотографий автоматически не удаляются.
+
+Проверяйте восстановление в **отдельную пустую базу**, например:
+
+```bash
+dc exec postgres sh -c 'createdb -U "$POSTGRES_USER" dosmart_restore_check'
+dc exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d dosmart_restore_check --no-owner --exit-on-error' < backups/ИМЯ_ФАЙЛА.dump
+dc exec postgres sh -c 'psql -U "$POSTGRES_USER" -d dosmart_restore_check -c "SELECT count(*) FROM orders;"'
+```
+
+Замените `ИМЯ_ФАЙЛА.dump` на существующий бэкап. Проверочная база создаётся один раз; для следующей проверки используйте другое имя или удалите только эту тестовую базу после проверки. Для восстановления рабочего сервера остановите запись, сохраните повреждённое состояние отдельно и сначала восстановите копию в изолированное окружение. Не накатывайте архив поверх рабочей базы без плана восстановления.
+
+## 3. Подключение терминала, WhatsApp и оплаты
+
+| Переменная | Что указать |
+| --- | --- |
+| `APP_URL` | Публичный HTTPS-адрес магазина, из него формируются ссылки |
+| `TERMINAL_IDENTITY_URL` | Доверенный HTTPS-адрес существующего API терминала `/api/user` |
+| `KASPI_PAYMENT_URL` | Настоящая HTTPS-ссылка удалённой оплаты вашего магазина в Kaspi |
+| `DOSMART_WHATSAPP` | Номер сотрудников DoSmart с кодом страны, например `77011234567` |
+| `TERMINAL_API_TOKEN` | Только для прежней серверной интеграции черновиков; новому мобильному сценарию не нужен |
+| `TERMINAL_INSTITUTION_MAP` | Сопоставление учреждений прежнего сценария; новая заявка сохраняет название из формы |
+
+`TERMINAL_IDENTITY_URL` указывает на сервер авторизации приложения терминала, а не на этот магазин. Он должен принимать текущий Bearer-токен и возвращать плоский JSON профиля с `id` и `id_number`. HTTPS обязателен, перенаправления запрещены. Без этой настройки `POST /api/v1/terminal/orders` вернёт 503; каталог и админка при этом доступны. Не отключайте проверку доступа ради теста — используйте тестовую учётную запись существующего сервера терминала.
+
+Пример новой заявки:
+
+```http
+POST /api/v1/terminal/orders
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer <токен текущей сессии терминала>
+```
+
+```json
+{
+  "request_id": "f04249ed-b062-44b8-9472-f9c1e0f3c36a",
+  "items": [{"product_id": 1, "quantity": 2}],
+  "prisoner_name": "Иванов Иван Иванович",
+  "institution_name": "Учреждение №12",
+  "contact_phone": "+77011234567",
+  "consent": true
+}
+```
+
+Используйте ID товара из своего каталога. Повтор одной попытки должен сохранять UUID и данные. Новая заявка — новый UUID. Ответ содержит номер заказа, статус и стоимость товаров. Цены считает сервер.
+
+Flutter-приложение собирается в **отдельном репозитории**, с выполненной настройкой Android и подписи:
+
+```bash
+flutter build apk --release --dart-define=DOSMART_BASE_URL=https://dos-mart.kz
+```
+
+Подставьте фактический домен. Эта команда не устанавливает приложение и не развёртывает сервер. Совместимая версия Flutter, настройки подписи и ограничения описаны в README приложения. APK от 26.09.2026 использует старый сценарий чата и не подходит для новой формы заявок.
+
+Для Android-эмулятора debug-сборка допускает `http://10.0.2.2:8088`; `127.0.0.1` внутри телефона/эмулятора не означает ваш компьютер. Для физического терминала используйте доступный HTTPS-сервер: произвольные HTTP-адреса локальной сети магазин приложения не принимает.
+
+При пустом `KASPI_PAYMENT_URL` активной кнопки оплаты нет. При пустом `DOSMART_WHATSAPP` на публичной странице не будет ссылки на сотрудников. Указанный в заявке WhatsApp родственника хранится отдельно.
+
+## 4. Проверка перед передачей пользователям
+
+- Открываются магазин, админка и фотографии товаров.
+- Сотрудник входит по логину и паролю; покупатель по телефону не получает права сотрудника.
+- Терминал отправляет ФИО, учреждение, WhatsApp и товары; заявка видна в фильтре «Новая заявка».
+- Повтор после потери ответа не создаёт второй заказ.
+- До согласования доставки оплата недоступна; после перехода в «Ожидает оплаты» сумма включает правильную доставку.
+- Ссылка из карточки открывается с другого устройства и содержит правильный домен.
+- Оплата подтверждается только после ручной сверки в Kaspi Pay.
+- Бэкап создаётся и восстанавливается в отдельную тестовую базу.
+
+Автоматические тесты запускаются в локальном окружении с dev-зависимостями:
+
+```bash
+composer install
+php artisan config:clear
+php artisan test
+```
+
+`phpunit.xml` задаёт SQLite в памяти. Не запускайте тесты с принудительно подставленной рабочей БД. В production-образе dev-зависимости намеренно не установлены.
+
+Проверка нового сценария от 28.09.2026: 19 серверных тестов, 223 проверки. В репозитории Flutter — 7 тестов нового магазина. Эти проверки не заменяют тест звонков и реального заказа на устройстве.
+
+## 5. Частые проблемы
+
+| Симптом | Что проверить |
+| --- | --- |
+| `php` / `composer` не найден | Установка и `PATH`; перезапустите терминал после настройки |
+| `could not find driver` | Локально включить `pdo_sqlite`; на сервере использовать production-образ с `pdo_pgsql` |
+| Не найдена таблица | Правильная БД в настройках и выполнение `php artisan migrate` |
+| Ошибка 500 | Локально `storage/logs/laravel.log`; Docker: `dc logs --tail=100 app` |
+| 502 от Caddy | `dc ps`, логи `app` и `web`, завершилась ли сборка приложения |
+| 419 при входе | Соответствие `APP_URL`, HTTP/HTTPS, session cookie; очистить cookie старого домена |
+| Изменение `.env` не действует локально | `php artisan config:clear`, перезапустить локальный сервер |
+| Изменение `.env.production` не действует | Пересоздать `app` и `scheduler`; одного `restart` недостаточно |
+| API терминала отвечает 503 | `TERMINAL_IDENTITY_URL`, его HTTPS и доступность из контейнера |
+| API терминала отвечает 401 | Действительность Bearer-сессии на сервере терминала |
+| API отвечает 422 | Обязательные поля, согласие, телефон, наличие товаров |
+| Нет фото локально | `php artisan storage:link`, наличие файлов и права доступа |
+| Нет фото в Docker | Том `uploads` подключён к `app` и `web`, файл действительно загружен |
+| HTTPS не появился | DNS, записи A/AAAA, порты 80/443, логи `web` |
+| После клонирования нет товаров | Заполнить админку; для пустой локальной тестовой базы можно однократно выполнить `db:seed` |
+
+Не публикуйте `.env`, `.env.production`, ключи, дампы базы и пользовательские файлы в Git. Шаблоны `.env.example` и `.env.production.example` предназначены для репозитория.
+
+## Дополнительные документы
+
+- [PILOT.md](PILOT.md) — текущий процесс, совместимость со старым API и подробности пилота.
+- [SHOP.md](SHOP.md) — сайт и покупательские аккаунты.
+- [docs/pilot-feedback.md](docs/pilot-feedback.md) — журнал проблем пилота.

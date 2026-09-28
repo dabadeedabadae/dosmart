@@ -8,6 +8,13 @@ class Institution extends Model
 {
     protected $fillable = ['name', 'city', 'address', 'is_active'];
 
+    protected $casts = ['is_active' => 'boolean'];
+
+    public function drafts()
+    {
+        return $this->hasMany(OrderDraft::class);
+    }
+
     public function orders()
     {
         return $this->hasMany(Order::class);

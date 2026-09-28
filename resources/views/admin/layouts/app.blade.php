@@ -335,6 +335,13 @@
             </svg>
             Категории
         </a>
+        <a href="{{ route('admin.institutions.index') }}"
+           class="nav-link {{ request()->routeIs('admin.institutions*') ? 'active' : '' }}">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path d="M3 21h18M5 21V3h14v18M9 7h2m2 0h2M9 11h2m2 0h2M10 21v-6h4v6"/>
+            </svg>
+            Учреждения
+        </a>
         <a href="{{ route('admin.orders.index') }}"
            class="nav-link {{ request()->routeIs('admin.orders*') ? 'active' : '' }}">
             <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
