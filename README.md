@@ -412,3 +412,24 @@ dc exec app php artisan optimize:clear
 ```
 
 Без Docker после обновления кода: `composer install --no-dev --optimize-autoloader`, `php artisan migrate --force`, `php artisan optimize:clear`; при необходимости перезапустить используемый PHP-FPM для обновления OPcache.
+
+## Отдельный DoSmart на планшете (новый сценарий)
+
+Код приложения находится в `mobile/`, инструкция сборки — в `mobile/README.md`.
+Сойлефон и DoSmart запускаются двумя отдельными приложениями из лаунчера MDM.
+Корзина отправляется непосредственно в DoSmart: `POST /api/v1/guest/orders`.
+Обязательные поля: случайный UUID `request_id`, массив `items` (`product_id`, `quantity`), `prisoner_name`, `institution_id`, `contact_phone`, `consent: true`.
+Секреты MDM и Сойлефона не нужны. Это публичная гостевая заявка, а не подтверждённая личность терминала. Действует ограничение частоты запросов; сотрудники проверяют введённые данные при обработке.
+
+В админке заявка попадает в «Новые заявки». Сотрудник открывает WhatsApp родственника, согласует товары и доставку, затем переводит заказ в ожидание оплаты и отправляет ссылку. Оплата подтверждается вручную после сверки в Kaspi. Старый веб-магазин и ссылки существующих заказов продолжают работать.
+
+На текущем сервере iCan используется `docker-compose.server.yml` и общий внешний nginx. После получения изменений:
+
+```sh
+cd /root/platforms/projects/dosmart
+dc() { docker compose -p dosmart --env-file .env.production -f docker-compose.server.yml "$@"; }
+dc up -d --build && dc exec app php artisan migrate --force && dc exec app php artisan optimize:clear
+docker exec nginx nginx -t && docker exec nginx nginx -s reload
+```
+
+Не заменяйте этот файл на `docker-compose.production.yml`: порты 80/443 уже заняты общим прокси. Каталог `mobile` исключён из Docker-образа сервера.

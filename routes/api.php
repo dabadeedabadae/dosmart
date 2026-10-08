@@ -11,6 +11,8 @@ Route::post('/v1/drafts', [\App\Http\Controllers\Shop\PilotController::class, 'c
 // Public guest baskets have the same access level as the website checkout.
 Route::post('/v1/guest/drafts', [\App\Http\Controllers\Shop\PilotController::class, 'create'])->middleware('throttle:15,1')->name('guest.drafts');
 
+Route::post('/v1/guest/orders', [\App\Http\Controllers\Api\GuestOrderController::class, 'store'])->middleware('throttle:10,1');
+
 // Публичные маршруты (без авторизации)
 Route::prefix('v1')->group(function () {
 
