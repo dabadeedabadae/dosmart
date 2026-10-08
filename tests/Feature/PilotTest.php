@@ -73,6 +73,48 @@ class PilotTest extends TestCase
         $this->post('/o', ['code' => strtolower($draft->code)])->assertRedirect('/o/'.$draft->code);
     }
 
+    public function test_reported_payment_is_idempotent_unpaid_and_status_tracks_admin_changes(): void
+    {
+        config(['pilot.kaspi_url' => 'https://pay.kaspi.kz/pay/example']);
+        $draft = $this->draft();
+        $data = $this->details();
+        $this->getJson('/o/'.$draft->code.'/status')->assertNotFound();
+        $this->post('/o/'.$draft->code.'/payment-reported')->assertNotFound();
+        $this->post('/o/'.$draft->code, $data)->assertRedirect();
+        $order = Order::first();
+        $statusUrl = '/o/'.$draft->code.'/status';
+        $before = $this->getJson($statusUrl)->assertOk()->assertJsonPath('label', 'Ожидает оплаты')->json('revision');
+        $this->get('/o/'.$draft->code.'/payment')->assertSee('Оплатить через Kaspi')->assertSee('Я оплатил');
+        $this->post('/o/'.$draft->code.'/payment-reported', ['status' => 'paid', 'total' => 1])->assertRedirect();
+        $order->refresh();
+        $this->assertSame('pending', $order->status);
+        $this->assertNotSame('paid', $order->payment_status);
+        $this->assertNull($order->paid_at);
+        $this->assertSame('7500.00', $order->total);
+        $this->assertNotNull($order->payment_reported_at);
+        $count = $order->statusHistory()->count();
+        $this->post('/o/'.$draft->code.'/payment-reported')->assertRedirect();
+        $this->assertSame($count, $order->statusHistory()->count());
+        $response = $this->getJson($statusUrl)->assertOk()->assertJsonPath('label', 'Заказ в обработке');
+        $this->assertNotSame($before, $response->json('revision'));
+        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+        $response->assertDontSee($data['contact_phone'])->assertDontSee($data['prisoner_name']);
+        $this->get('/o/'.$draft->code.'/payment')->assertSee('Заказ в обработке')->assertDontSee('Оплатить через Kaspi');
+        $admin = User::factory()->create(['username' => 'payment_operator']);
+        $this->actingAs($admin, 'web')->get('/admin/orders')->assertSee('Клиент сообщил об оплате');
+        $url = '/admin/orders/'.$order->id.'/status';
+        $this->patch($url, ['status' => 'paid'])->assertSessionHasErrors('payment_verified');
+        $this->patch($url, ['status' => 'paid', 'payment_verified' => 1, 'payment_reference' => 'REAL-CHECK-TEST'])->assertRedirect();
+        $this->getJson($statusUrl)->assertJsonPath('status', 'paid')->assertJsonPath('label', 'Оплачен');
+        $this->patch($url, ['status' => 'delivering'])->assertRedirect();
+        $this->getJson($statusUrl)->assertJsonPath('label', 'В доставке');
+        $this->patch($url, ['status' => 'delivered'])->assertRedirect();
+        $this->getJson($statusUrl)->assertJsonPath('label', 'Доставлен');
+        $this->post('/o/'.$draft->code.'/payment-reported')->assertRedirect();
+        $this->assertSame('delivered', $order->fresh()->status);
+        $this->getJson('/o/ZZZZZZZZ/status')->assertNotFound();
+    }
+
     public function test_standard_delivery_account_ownership_and_stale_prices(): void
     {
         $draft = $this->draft();

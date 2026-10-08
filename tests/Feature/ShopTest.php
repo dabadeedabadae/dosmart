@@ -40,7 +40,7 @@ class ShopTest extends TestCase
             Product::create(['name' => 'Product '.$i, 'price' => $i * 100, 'is_active' => true]);
         }
         Product::create(['name' => 'Hidden', 'price' => 10, 'is_active' => false]);
-        $this->get('/shop')->assertOk()->assertSee('26 товаров')->assertDontSee('Hidden');
+        $this->get('/shop')->assertOk()->assertSee('Товаров: 26')->assertDontSee('Hidden');
         $this->get('/shop?page=2')->assertOk()->assertSee('Product 25');
         $this->get('/shop?q=Product+26')->assertOk()->assertSee('Product 26')->assertDontSee('Product 25');
         $this->get('/shop/login')->assertOk();

@@ -74,6 +74,7 @@
                         @endphp
                         <span class="badge {{ $cls }}">
                             <span class="badge-dot"></span>{{ $order->status_label }}
+@if($order->status === 'pending' && $order->payment_reported_at)<span class="badge badge-warning">Клиент сообщил об оплате — проверить Kaspi</span>@endif
                         </span>
                     </td>
                     <td style="color:var(--text-secondary);white-space:nowrap;font-size:13px">

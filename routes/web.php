@@ -33,6 +33,8 @@ Route::post('/o', [\App\Http\Controllers\Shop\PilotController::class, 'lookup'])
 Route::get('/o/{code}', [\App\Http\Controllers\Shop\PilotController::class, 'show'])->middleware('throttle:30,1')->name('pilot.show');
 Route::post('/o/{code}', [\App\Http\Controllers\Shop\PilotController::class, 'checkout'])->middleware('throttle:10,1')->name('pilot.checkout');
 Route::get('/o/{code}/payment', [\App\Http\Controllers\Shop\PilotController::class, 'payment'])->middleware('throttle:30,1')->name('pilot.payment');
+Route::post('/o/{code}/payment-reported', [\App\Http\Controllers\Shop\PilotController::class, 'reportPayment'])->middleware('throttle:10,1')->name('pilot.report-payment');
+Route::get('/o/{code}/status', [\App\Http\Controllers\Shop\PilotController::class, 'status'])->middleware('throttle:30,1')->name('pilot.status');
 Route::view('/privacy', 'shop.privacy')->name('privacy');
 
 

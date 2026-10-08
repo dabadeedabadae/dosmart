@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Shop;
 
 use App\Http\Controllers\Controller;
 use App\Models\Institution;
+use App\Models\Order;
+use Illuminate\Support\Facades\DB;
 use App\Models\OrderDraft;
 use App\Services\PilotCheckout;
 use Illuminate\Http\Request;
@@ -14,7 +16,8 @@ class PilotController extends Controller
 {
     public function create(Request $request, PilotCheckout $service)
     {
-        $terminal = $request->is('api/*');
+        $guest = $request->routeIs('guest.drafts');
+        $terminal = $request->is('api/*') && ! $guest;
         if ($terminal && ! $request->attributes->has('terminal_subject')) {
             $secret = (string) config('pilot.terminal_token');
             abort_unless(strlen($secret) >= 32 && hash_equals($secret, (string) $request->bearerToken()), 401);
@@ -26,7 +29,7 @@ class PilotController extends Controller
             'institution_id' => ['nullable', 'integer', Rule::exists('institutions', 'id')->where('is_active', true)],
         ]);
         $data['items'] = array_map(fn ($item) => ['product_id' => (int) $item['product_id'], 'quantity' => (int) $item['quantity']], $data['items']);
-        $data['terminal_subject'] = $request->attributes->get('terminal_subject');
+        $data['terminal_subject'] = $terminal ? $request->attributes->get('terminal_subject') : null;
         $draft = $service->create($data, $terminal ? 'terminal' : 'website');
         $quote = $draft->order_id
             ? ['items' => $draft->order->items->toArray(), 'subtotal' => (float) $draft->order->subtotal]
@@ -106,6 +109,41 @@ class PilotController extends Controller
         return redirect()->route('pilot.payment', $draft->code);
     }
 
+    public function reportPayment(string $code)
+    {
+        $draft = $this->draft($code);
+        abort_unless($draft->order_id, 404);
+        DB::transaction(function () use ($draft) {
+            $order = Order::whereKey($draft->order_id)->lockForUpdate()->firstOrFail();
+            // A customer's report never confirms a payment or changes its amount.
+            if ($order->status !== 'pending' || $order->payment_reported_at) {
+                return;
+            }
+            $order->update(['payment_reported_at' => now()]);
+            $order->statusHistory()->create([
+                'status' => 'pending',
+                'comment' => 'Клиент сообщил об оплате. Требуется сверка в Kaspi Pay.',
+            ]);
+        });
+
+        return redirect()->route('pilot.payment', $draft->code);
+    }
+
+    public function status(string $code)
+    {
+        $draft = $this->draft($code);
+        abort_unless($draft->order_id, 404);
+        $order = $draft->order;
+        return response()->json([
+            'status' => $order->status,
+            'label' => $order->customer_status_label,
+            'revision' => hash('sha256', json_encode([
+                $order->status, $order->payment_status, $order->payment_reported_at,
+                $order->total, $order->refund_amount, $order->delivery_type,
+            ])),
+        ])->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
+    }
+
     public function payment(string $code)
     {
         $draft = $this->draft($code);
@@ -118,6 +156,6 @@ class PilotController extends Controller
         }
         $whatsapp = preg_replace('/\D/', '', (string) config('pilot.whatsapp'));
 
-        return response()->view('shop.pilot-payment', compact('order', 'kaspiUrl', 'whatsapp'))->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
+        return response()->view('shop.pilot-payment', ['order' => $order, 'kaspiUrl' => $kaspiUrl, 'whatsapp' => $whatsapp, 'revision' => hash('sha256', json_encode([$order->status, $order->payment_status, $order->payment_reported_at, $order->total, $order->refund_amount, $order->delivery_type]))])->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
     }
 }

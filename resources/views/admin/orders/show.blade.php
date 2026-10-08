@@ -25,6 +25,7 @@
         @endphp
         <span class="badge {{ $cls }}">
             <span class="badge-dot"></span>{{ $order->status_label }}
+@if($order->status === 'pending' && $order->payment_reported_at)<span class="badge badge-warning">Клиент сообщил об оплате — проверить Kaspi</span>@endif
         </span>
     </div>
 </div>
@@ -118,9 +119,9 @@
                 <div style="border-top:1px solid var(--border);padding-top:12px">
                     <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:2px">WhatsApp родственника</div>
                     <div style="font-weight:600">
-                        <a href="tel:{{ $order->contact_phone }}" style="color:var(--accent);text-decoration:none">
+                        @if($order->contact_phone)<a href="tel:{{ $order->contact_phone }}" style="color:var(--accent);text-decoration:none">
                             {{ $order->contact_phone }}
-                        </a>
+                        </a>@else Не указан @endif
                     </div>
                 </div>
                 @if($order->relative_name)
@@ -152,7 +153,7 @@
                 }
             @endphp
             @if($order->status === 'new')<p style="margin-bottom:12px">Данные введены на терминале. Уточните ФИО и учреждение, согласуйте доставку с родственником. Затем выберите «Ожидает оплаты» и тип доставки ниже.</p>@endif
-            <a class="btn btn-primary" target="_blank" rel="noopener noreferrer" href="https://wa.me/{{ preg_replace('/\D/', '', $order->contact_phone) }}?text={{ rawurlencode($contactText) }}">Открыть WhatsApp родственника</a>
+            @if($order->contact_phone)<a class="btn btn-primary" target="_blank" rel="noopener noreferrer" href="https://wa.me/{{ preg_replace('/\D/', '', $order->contact_phone) }}?text={{ rawurlencode($contactText) }}">Открыть WhatsApp родственника</a>@else<p>Телефон не указан. Связь с родственником — через чат Сойлефона.</p>@endif
             <p style="font-size:12px;margin-top:8px">Откроется подготовленный текст. Отправку подтверждает сотрудник в WhatsApp.</p>
             @if($order->status === 'pending' && $paymentLink)
                 <label style="display:block;margin-top:16px">Ссылка на оплату для родственника</label>

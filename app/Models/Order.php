@@ -11,12 +11,13 @@ class Order extends Model
         'prisoner_name', 'squad_number', 'institution_name', 'contact_phone', 'relative_name',
         'subtotal', 'delivery_fee', 'total',
         'status', 'payment_status', 'kaspi_transaction_id',
-        'notes', 'delivered_at', 'delivery_type', 'consented_at', 'consent_version', 'paid_at', 'refund_amount',
+        'payment_reported_at', 'notes', 'delivered_at', 'delivery_type', 'consented_at', 'consent_version', 'paid_at', 'refund_amount',
     ];
 
     protected $casts = [
         'refund_amount' => 'decimal:2',
         'paid_at' => 'datetime',
+        'payment_reported_at' => 'datetime',
         'consented_at' => 'datetime',
         'subtotal' => 'decimal:2',
         'delivery_fee' => 'decimal:2',
@@ -64,6 +65,12 @@ class Order extends Model
             'cancelled' => 'Отменён',
             default => $this->status,
         };
+    }
+
+    public function getCustomerStatusLabelAttribute(): string
+    {
+        return $this->status === 'pending' && $this->payment_reported_at
+            ? 'Заказ в обработке' : $this->status_label;
     }
 
     public function getPaymentStatusLabelAttribute(): string

@@ -68,9 +68,9 @@ function renderProductActions(wrapper, productId) {
             В корзину</button>`;
     } else {
         foot.innerHTML = `<div class="product-counter">
-            <button onclick="handleDec(this, ${productId})">−</button>
+            <button aria-label="Уменьшить количество" onclick="handleDec(this, ${productId})">−</button>
             <span class="qty">${qty}</span>
-            <button onclick="handleInc(this, ${productId})">+</button>
+            <button aria-label="Увеличить количество" onclick="handleInc(this, ${productId})">+</button>
         </div>`;
     }
 }

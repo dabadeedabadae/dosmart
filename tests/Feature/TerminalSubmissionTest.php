@@ -57,7 +57,7 @@ class TerminalSubmissionTest extends TestCase
     public function test_required_fields_consent_and_availability_are_checked_without_partial_orders(): void
     {
         $data = $this->payload();
-        foreach (['prisoner_name', 'institution_name', 'contact_phone', 'consent'] as $field) {
+        foreach (['prisoner_name', 'institution_name', 'consent'] as $field) {
             $invalid = $data;
             unset($invalid[$field]);
             $this->withToken('session')->postJson('/api/v1/terminal/orders', $invalid)->assertUnprocessable()->assertJsonValidationErrors($field);
@@ -69,6 +69,16 @@ class TerminalSubmissionTest extends TestCase
         $this->withToken('session')->postJson('/api/v1/terminal/orders', $data)->assertUnprocessable();
         $this->assertDatabaseCount('orders', 0);
         $this->assertDatabaseCount('order_drafts', 0);
+    }
+
+    public function test_terminal_order_can_be_submitted_without_relative_phone(): void
+    {
+        $data = $this->payload();
+        unset($data['contact_phone']);
+        $this->withToken('session')->postJson('/api/v1/terminal/orders', $data)->assertCreated();
+        $this->assertSame('', Order::first()->contact_phone);
+        $this->withToken('session')->postJson('/api/v1/terminal/orders', $data)->assertCreated();
+        $this->assertDatabaseCount('orders', 1);
     }
 
     public function test_admin_agrees_delivery_before_payment_and_verifies_payment_manually(): void

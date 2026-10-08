@@ -8,6 +8,9 @@ use App\Http\Controllers\Api\InstitutionController;
 
 Route::post('/v1/drafts', [\App\Http\Controllers\Shop\PilotController::class, 'create'])->middleware('throttle:30,1');
 
+// Public guest baskets have the same access level as the website checkout.
+Route::post('/v1/guest/drafts', [\App\Http\Controllers\Shop\PilotController::class, 'create'])->middleware('throttle:15,1')->name('guest.drafts');
+
 // Публичные маршруты (без авторизации)
 Route::prefix('v1')->group(function () {
 

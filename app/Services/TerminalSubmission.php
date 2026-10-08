@@ -37,13 +37,13 @@ class TerminalSubmission
             $order = Order::create([
                 'order_number' => 'DOS-'.$draft->code,
                 'prisoner_name' => $data['prisoner_name'], 'institution_name' => $data['institution_name'],
-                'contact_phone' => $data['contact_phone'], 'subtotal' => $quote['subtotal'],
+                'contact_phone' => $data['contact_phone'] ?? '', 'subtotal' => $quote['subtotal'],
                 'delivery_fee' => 0, 'total' => $quote['subtotal'], 'delivery_type' => 'unconfirmed',
                 'status' => 'new', 'payment_status' => 'unpaid',
                 'consented_at' => now(), 'consent_version' => config('pilot.consent_version'),
             ]);
             $order->items()->createMany($quote['items']);
-            $order->statusHistory()->create(['status' => 'new', 'comment' => 'Заявка с терминала. Данные введены пользователем; сотруднику нужно связаться с родственником и согласовать доставку.']);
+            $order->statusHistory()->create(['status' => 'new', 'comment' => 'Заявка с терминала. Данные введены пользователем; требуется обработка и согласование доставки.']);
             $draft->update(['order_id' => $order->id]);
             $service->record($draft, 'submission_received');
 

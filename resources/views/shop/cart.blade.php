@@ -22,7 +22,7 @@
     </div>
 
     <div id="cart-content">
-        <div class="section-title">Ваша корзина</div>
+        <h1 class="cart-title">Ваша корзина</h1><p class="cart-intro">Проверьте товары и количество. Доставку выберете при оформлении.</p>
 
         <div class="cart-columns" style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start">
 

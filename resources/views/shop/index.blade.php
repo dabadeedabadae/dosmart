@@ -2,13 +2,28 @@
 @section('title', 'DOSMART — Каталог')
 
 @section('content')
-<section class="hero"><div><div class="eyebrow">DOSMART · МАГАЗИН С ЗАБОТОЙ</div><h1>Всё нужное.<br>Для ваших близких.</h1><p>Продукты и повседневные товары с доставкой в учреждение.<br>Вы выбираете — мы собираем и передаём.</p><a href="#catalog" class="btn btn-primary btn-lg">Выбрать товары ↗</a></div><div class="hero-art" aria-hidden="true"><span class="art-circle"></span><div class="shopping-bag"><span class="bag-handle"></span><strong>D<span>●</span></strong><small>DOSMART</small></div><div class="hero-note">Собираем с заботой ♡</div></div></section>
-<div class="benefits"><span>01 &nbsp; Выберите товары</span><span>02 &nbsp; Укажите получателя</span><span>03 &nbsp; Дождитесь подтверждения</span></div>
-<form class="catalog-search" action="{{ route('shop.index') }}" id="catalog"><label class="sr-only" for="search">Поиск товаров</label><input id="search" name="q" class="form-control" placeholder="Найти нужный товар…" value="{{ request('q') }}"><label class="sr-only" for="sort">Сортировка</label><select id="sort" name="sort" class="form-control"><option value="new">Сначала новые</option><option value="price_asc" @selected(request('sort') === 'price_asc')>Сначала дешевле</option><option value="price_desc" @selected(request('sort') === 'price_desc')>Сначала дороже</option></select><button class="btn btn-primary">Найти</button></form>
-<form method="post" action="{{ route('pilot.lookup') }}" class="form-card" style="margin-bottom:24px">@csrf
-<label for="order-code" class="form-label">Получили код от близкого? Откройте готовую корзину</label>
-<div style="display:flex;gap:10px"><input class="form-control" id="order-code" name="code" placeholder="Например, 7K3M9A2B" maxlength="8" required style="text-transform:uppercase"><button class="btn btn-primary">Открыть</button></div>
-@error('code')<p role="alert">{{ $message }}</p>@enderror
+<section class="hero">
+    <div class="hero-copy">
+        <div class="eyebrow"><span></span> ДОСТАВКА В УЧРЕЖДЕНИЯ</div>
+        <h1>Быть рядом —<br>даже на расстоянии.</h1>
+        <p>Соберите для близкого продукты и нужные вещи.<br class="desktop-break"> Мы поможем с оформлением и доставкой.</p>
+        <a href="#catalog" class="btn btn-primary btn-lg">Собрать корзину <span aria-hidden="true">→</span></a>
+        <div class="hero-detail">Продукты, средства гигиены и повседневные мелочи</div>
+    </div>
+    <div class="hero-visual"><img src="{{ asset('images/grocery-bag.svg') }}" alt="Бумажная сумка с хлебом, молоком и чаем" width="540" height="440"><span class="parcel-note">В каждой посылке —<br><em>немного дома.</em></span></div>
+</section>
+<section class="order-shortcut" aria-labelledby="code-title">
+    <div class="shortcut-heading"><span class="shortcut-icon" aria-hidden="true">↗</span><div><h2 id="code-title">Уже получили код корзины?</h2><p>Введите его здесь — все выбранные товары уже внутри.</p></div></div>
+    <form method="post" action="{{ route('pilot.lookup') }}">@csrf
+        <label class="sr-only" for="order-code">Код корзины</label>
+        <div class="code-fields"><input class="form-control" id="order-code" name="code" placeholder="Код из сообщения" maxlength="8" required autocapitalize="characters" spellcheck="false" value="{{ old('code') }}"><button class="btn btn-primary">Открыть <span aria-hidden="true">→</span></button></div>
+        @error('code')<p class="code-error" role="alert">{{ $message }}</p>@enderror
+    </form>
+</section>
+<div class="catalog-heading" id="catalog"><div><div class="eyebrow">ПРОСТЫЕ ВЕЩИ, КОТОРЫЕ НУЖНЫ</div><h2>Что передадим близкому?</h2></div><span class="catalog-count">В каталоге: {{ $featured->total() }}</span></div>
+<form class="catalog-search" action="{{ route('shop.index') }}#catalog">
+    <div class="search-field"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><label class="sr-only" for="search">Поиск товаров</label><input id="search" name="q" class="form-control" placeholder="Например, чай или мыло" value="{{ request('q') }}"></div>
+    <label class="sr-only" for="sort">Сортировка</label><select id="sort" name="sort" class="form-control"><option value="new">Сначала новые</option><option value="price_asc" @selected(request('sort') === 'price_asc')>Сначала дешевле</option><option value="price_desc" @selected(request('sort') === 'price_desc')>Сначала дороже</option></select><button class="btn btn-primary">Найти</button>
 </form>
 <div class="shop-layout">
 
@@ -29,7 +44,7 @@
     {{-- Main content --}}
     <div>
         @if($featured->isNotEmpty())
-        <div class="order-heading"><h2 class="section-title">Все товары</h2><span class="form-hint">{{ $featured->total() }} товаров</span></div>
+        <div class="order-heading"><h2 class="section-title">{{ request('q') ? 'Результаты поиска' : 'Все товары' }}</h2><span class="form-hint">Товаров: {{ $featured->total() }}</span></div>
         <div class="products-grid">
             @foreach($featured as $product)
                 @include('shop.partials.product-card', ['product' => $product])
@@ -38,7 +53,7 @@
         @include('shop.partials.pagination', ['paginator' => $featured])
         @else
         <div class="empty">
-            <div class="empty-icon">🏪</div>
+            <div class="empty-icon" aria-hidden="true">⌕</div>
             <h3>{{ request('q') ? 'Ничего не найдено' : 'Товары скоро появятся' }}</h3>
             <p>Попробуйте другой запрос или вернитесь позже</p>
         </div>
@@ -46,6 +61,8 @@
     </div>
 
 </div>
+<section class="how-it-works" aria-label="Как сделать заказ"><div><span>01</span><h3>Выберите нужное</h3><p>Добавьте товары в корзину или откройте её по коду от близкого.</p></div><div><span>02</span><h3>Укажите получателя</h3><p>Заполните данные и выберите доставку при оформлении.</p></div><div><span>03</span><h3>Оставайтесь на связи</h3><p>Сотрудник проверит оплату и поможет с дальнейшими шагами.</p></div></section>
+
 @endsection
 
 @section('scripts')
@@ -71,9 +88,9 @@ function renderProductActions(wrapper, productId) {
         </button>`;
     } else {
         foot.innerHTML = `<div class="product-counter">
-            <button onclick="handleDec(this, ${productId})">−</button>
+            <button aria-label="Уменьшить количество" onclick="handleDec(this, ${productId})">−</button>
             <span class="qty">${qty}</span>
-            <button onclick="handleInc(this, ${productId})">+</button>
+            <button aria-label="Увеличить количество" onclick="handleInc(this, ${productId})">+</button>
         </div>`;
     }
 }
