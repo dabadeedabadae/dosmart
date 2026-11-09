@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Order extends Model
 {
     protected $fillable = [
-        'order_number', 'customer_id', 'user_id', 'institution_id',
+        'order_number', 'display_number', 'customer_id', 'user_id', 'institution_id',
         'prisoner_name', 'squad_number', 'institution_name', 'contact_phone', 'relative_name',
         'subtotal', 'delivery_fee', 'total',
         'status', 'payment_status', 'kaspi_transaction_id',
@@ -25,6 +25,11 @@ class Order extends Model
         'delivered_at' => 'datetime',
     ];
 
+    public function getOrderNumberAttribute($value): string
+    {
+        return $this->attributes['display_number'] ?? $value;
+    }
+
     // Номер генерируется на основе ID уже после вставки — никакого race condition
     public static function generateOrderNumber(int $id): string
     {
@@ -34,6 +39,11 @@ class Order extends Model
     public function draft()
     {
         return $this->hasOne(OrderDraft::class);
+    }
+
+    public function changeRequests()
+    {
+        return $this->hasMany(OrderChangeRequest::class);
     }
 
     public function items()

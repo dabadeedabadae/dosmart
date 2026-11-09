@@ -29,7 +29,21 @@ class PilotTest extends TestCase
     {
         $institution = Institution::create(['name' => 'Учреждение 1', 'city' => 'Алматы', 'is_active' => true]);
 
-        return ['prisoner_name' => 'Тестовый Получатель', 'institution_id' => $institution->id, 'contact_phone' => '+77001112233', 'delivery_type' => 'urgent', 'consent' => 1, 'expected_total' => 7500];
+        return ['prisoner_name' => 'Тестовый Получатель', 'institution_id' => $institution->id, 'contact_phone' => '+77001112233', 'delivery_type' => 'standard', 'consent' => 1, 'expected_total' => 5500];
+    }
+
+    public function test_only_standard_delivery_and_formatted_phone_are_accepted(): void
+    {
+        $draft = $this->draft();
+        $data = $this->details();
+        $data['delivery_type'] = 'urgent';
+        $this->post('/o/'.$draft->code, $data)->assertSessionHasErrors('delivery_type');
+        $this->assertDatabaseCount('orders', 0);
+        $data['delivery_type'] = 'standard';
+        $data['contact_phone'] = '+7 705 621 8748';
+        $this->post('/o/'.$draft->code, $data)->assertRedirect('/o/'.$draft->code.'/payment');
+        $this->assertSame('+77056218748', Order::first()->contact_phone);
+        $this->assertSame('3000.00', Order::first()->delivery_fee);
     }
 
     public function test_terminal_auth_random_code_and_idempotency(): void
@@ -63,8 +77,8 @@ class PilotTest extends TestCase
         $data['total'] = 1;
         $this->post('/o/'.$draft->code, $data)->assertRedirect('/o/'.$draft->code.'/payment');
         $order = Order::first();
-        $this->assertSame('7500.00', $order->total);
-        $this->assertSame('5000.00', $order->delivery_fee);
+        $this->assertSame('5500.00', $order->total);
+        $this->assertSame('3000.00', $order->delivery_fee);
         $this->assertNotNull($order->consented_at);
         $this->assertNull($order->customer_id);
         $this->post('/o/'.$draft->code, $data)->assertRedirect();
@@ -90,7 +104,7 @@ class PilotTest extends TestCase
         $this->assertSame('pending', $order->status);
         $this->assertNotSame('paid', $order->payment_status);
         $this->assertNull($order->paid_at);
-        $this->assertSame('7500.00', $order->total);
+        $this->assertSame('5500.00', $order->total);
         $this->assertNotNull($order->payment_reported_at);
         $count = $order->statusHistory()->count();
         $this->post('/o/'.$draft->code.'/payment-reported')->assertRedirect();
@@ -175,8 +189,8 @@ class PilotTest extends TestCase
         $this->patch($url, ['status' => 'refunded', 'refund_amount' => 1000, 'refund_verified' => 1, 'comment' => 'Частичный возврат'])->assertRedirect();
         $this->assertSame('1000.00', (string) $order->fresh()->refund_amount);
         $this->assertSame('refunded', $order->fresh()->payment_status);
-        $this->patch($url, ['status' => 'refunded', 'refund_amount' => 7500, 'refund_verified' => 1, 'comment' => 'Полный возврат'])->assertRedirect();
-        $this->assertSame('7500.00', (string) $order->fresh()->refund_amount);
+        $this->patch($url, ['status' => 'refunded', 'refund_amount' => 5500, 'refund_verified' => 1, 'comment' => 'Полный возврат'])->assertRedirect();
+        $this->assertSame('5500.00', (string) $order->fresh()->refund_amount);
     }
 
     public function test_request_id_conflict_terminal_fail_closed_and_staff_login(): void

@@ -20,7 +20,7 @@
                 <option value="">Все категории</option>
                 @foreach($categories as $cat)
                     <option value="{{ $cat->id }}" {{ request('category_id') == $cat->id ? 'selected' : '' }}>
-                        {{ $cat->name }}
+                        {{ $cat->path_name }}
                     </option>
                 @endforeach
             </select>
@@ -29,7 +29,7 @@
             @endif
         </form>
     </div>
-    <a href="{{ route('admin.products.create') }}" class="btn btn-primary">
+    <a href="{{ route('admin.products.create', ['list' => request()->only('category_id', 'q', 'page')]) }}" class="btn btn-primary">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14"/>
         </svg>
@@ -85,7 +85,7 @@
                     </td>
                     <td style="width:80px">
                         <div style="display:flex;gap:2px;justify-content:flex-end">
-                            <a href="{{ route('admin.products.edit', $product) }}" class="icon-btn" title="Редактировать">
+                            <a href="{{ route('admin.products.edit', ['product' => $product, 'list' => request()->only('category_id', 'q', 'page')]) }}" class="icon-btn" title="Редактировать">
                                 <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -94,6 +94,9 @@
                             <form method="POST" action="{{ route('admin.products.destroy', $product) }}"
                                   onsubmit="return confirm('Удалить «{{ $product->name }}»?')" style="display:contents">
                                 @csrf @method('DELETE')
+                                @foreach(request()->only('category_id', 'q', 'page') as $key => $value)
+                                    @if(is_scalar($value))<input type="hidden" name="list[{{ $key }}]" value="{{ $value }}">@endif
+                                @endforeach
                                 <button type="submit" class="icon-btn delete" title="Удалить">
                                     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
                                         <polyline points="3 6 5 6 21 6"/>

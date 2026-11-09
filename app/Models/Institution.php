@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Institution extends Model
 {
-    protected $fillable = ['name', 'city', 'address', 'is_active'];
+    protected $fillable = ['name', 'order_code', 'city', 'address', 'is_active'];
 
     protected $casts = ['is_active' => 'boolean'];
 

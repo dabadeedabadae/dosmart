@@ -9,9 +9,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('css/shop.css') }}?v=20260929">
+    <link rel="stylesheet" href="{{ asset('css/checkout.css') }}?v=20261019">
 
 </head>
-<body>
+<body class="@yield('body-class')">
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 
 <header class="header">
@@ -37,6 +38,7 @@
         </a>
     </div>
 </header>
+<div class="delivery-strip"><div class="container"><span>Доставка — <strong>{{ number_format((float) config('pilot.delivery_fee', 3000), 0, ',', ' ') }} ₸</strong></span><span>Обработка заявок: <strong>{{ config('pilot.service_hours') }}</strong> · UTC+5</span></div></div>
 
 <main class="container page" id="main-content">
     @yield('content')

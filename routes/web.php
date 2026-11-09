@@ -34,7 +34,9 @@ Route::get('/o/{code}', [\App\Http\Controllers\Shop\PilotController::class, 'sho
 Route::post('/o/{code}', [\App\Http\Controllers\Shop\PilotController::class, 'checkout'])->middleware('throttle:10,1')->name('pilot.checkout');
 Route::get('/o/{code}/payment', [\App\Http\Controllers\Shop\PilotController::class, 'payment'])->middleware('throttle:30,1')->name('pilot.payment');
 Route::post('/o/{code}/payment-reported', [\App\Http\Controllers\Shop\PilotController::class, 'reportPayment'])->middleware('throttle:10,1')->name('pilot.report-payment');
+Route::post('/o/{code}/changes', [\App\Http\Controllers\Shop\PilotController::class, 'requestChanges'])->middleware('throttle:10,1')->name('pilot.changes');
 Route::get('/o/{code}/status', [\App\Http\Controllers\Shop\PilotController::class, 'status'])->middleware('throttle:30,1')->name('pilot.status');
+Route::get('/o/{code}/receipt', [\App\Http\Controllers\Shop\PilotController::class, 'receipt'])->middleware('throttle:30,1')->name('pilot.receipt');
 Route::view('/privacy', 'shop.privacy')->name('privacy');
 
 
@@ -47,7 +49,10 @@ Route::post('/admin/logout', [AuthController::class, 'logout'])->middleware('aut
 
 Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::get('/orders/report', [\App\Http\Controllers\Admin\OrderReportController::class, 'index'])->name('orders.report');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+    Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt'])->name('orders.receipt');
+    Route::post('/orders/{order}/changes/{change}', [OrderController::class, 'reviewChanges'])->name('orders.changes');
     Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status');
 
     Route::resource('products', ProductController::class)->except(['show']);

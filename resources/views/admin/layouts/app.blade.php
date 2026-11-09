@@ -306,6 +306,7 @@
         .filter-select { min-width: 150px; }
     </style>
     @stack('head')
+    <link rel="stylesheet" href="{{ asset('css/admin-mobile.css') }}?v=20261022">
 </head>
 <body>
 
@@ -316,9 +317,10 @@
             <div class="logo-text-name">DOSMART</div>
             <div class="logo-text-sub">market · админка</div>
         </div>
+        <button type="button" class="admin-menu-toggle btn btn-ghost" aria-controls="admin-navigation" aria-expanded="true">Меню</button>
     </div>
 
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" id="admin-navigation" aria-label="Разделы админки">
         <a href="{{ route('admin.products.index') }}"
            class="nav-link {{ request()->routeIs('admin.products*') ? 'active' : '' }}">
             <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -393,5 +395,6 @@
 </main>
 
 @stack('scripts')
+<script src="{{ asset('js/admin-mobile.js') }}?v=20261022" defer></script>
 </body>
 </html>

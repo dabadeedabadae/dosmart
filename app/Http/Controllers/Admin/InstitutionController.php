@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Institution;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class InstitutionController extends Controller
 {
@@ -34,7 +36,11 @@ class InstitutionController extends Controller
 
     public function update(Request $request, Institution $institution)
     {
-        $institution->update($this->validated($request));
+        $data = $this->validated($request);
+        if (array_key_exists('order_code', $data) && $data['order_code'] !== $institution->order_code && $institution->orders()->whereNotNull('display_number')->exists()) {
+            throw ValidationException::withMessages(['order_code' => 'Этот код уже используется в номерах заказов и не может быть изменён.']);
+        }
+        $institution->update($data);
 
         return redirect()->route('admin.institutions.index')->with('success', 'Учреждение обновлено.');
     }
@@ -61,6 +67,7 @@ class InstitutionController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
+            'order_code' => ['sometimes', 'nullable', 'regex:/^(0[1-9]|[1-9][0-9])$/', Rule::unique('institutions', 'order_code')->ignore($request->route('institution'))],
             'city' => 'required|string|max:255',
             'address' => 'nullable|string|max:255',
             'is_active' => 'required|boolean',

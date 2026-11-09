@@ -23,6 +23,7 @@ class TerminalOrderController extends Controller
             'items' => 'required|array|min:1|max:100',
             'items.*.product_id' => 'required|integer|distinct',
             'items.*.quantity' => 'required|integer|min:1|max:1000',
+            'squad_number' => 'nullable|string|max:50',
             'prisoner_name' => 'required|string|min:3|max:255',
             'institution_name' => 'required|string|min:2|max:255',
             'contact_phone' => ['nullable', 'string', 'regex:/^\+[1-9][0-9]{9,14}$/'],

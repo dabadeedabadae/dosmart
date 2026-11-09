@@ -16,7 +16,7 @@
     $editing = request('edit') ? $categories->firstWhere('id', (int) request('edit')) : null;
 @endphp
 
-<div style="display:flex;gap:24px;align-items:flex-start">
+<div class="editor-columns" style="display:flex;gap:24px;align-items:flex-start">
     <div style="flex:0 0 auto;width:640px;max-width:100%">
         @if($categories->isEmpty())
             <div class="card" style="padding:48px;text-align:center;color:var(--text-muted)">
@@ -28,7 +28,7 @@
                 <div class="cat-list-item">
                     <div class="cat-dot {{ $category->products_count === 0 ? 'empty' : '' }}"></div>
                     <div style="flex:1;min-width:0">
-                        <div class="cat-list-name">{{ $category->name }}</div>
+                        <div class="cat-list-name">{{ $category->path_name }}</div>
                         <div class="cat-list-count">
                             {{ $category->products_count }}
                             @php
@@ -38,6 +38,7 @@
                         </div>
                     </div>
                     <div class="cat-list-actions">
+                        <a class="btn btn-secondary" href="{{ route('admin.categories.create', ['parent_id' => $category->id]) }}">＋ Подкатегория</a>
                         <a href="{{ route('admin.categories.index', ['edit' => $category->id]) }}"
                            class="icon-btn {{ $editing && $editing->id === $category->id ? 'active' : '' }}" title="Редактировать">
                             <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
@@ -46,7 +47,7 @@
                             </svg>
                         </a>
                         <form method="POST" action="{{ route('admin.categories.destroy', $category) }}"
-                              onsubmit="return confirm('Удалить категорию «{{ $category->name }}»?\nТовары в ней останутся без категории.')"
+                              onsubmit="return confirm('Удалить категорию «{{ $category->name }}»?')"
                               style="display:contents">
                             @csrf @method('DELETE')
                             <button type="submit" class="icon-btn delete" title="Удалить">
