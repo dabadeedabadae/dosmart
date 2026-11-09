@@ -22,6 +22,7 @@
                 <p id="cart-error" class="checkout-error" role="alert" hidden></p>
                 <button type="button" onclick="prepareDraft()" class="btn btn-primary btn-block btn-lg draft-button">Продолжить оформление →</button>
                 <p class="checkout-note">Сейчас платить не нужно.</p>
+                @include('shop.partials.consumer-links')
             </aside>
         </div>
     </div>
@@ -65,7 +66,7 @@ function renderCart() {
   const row=document.createElement('article');row.className='cart-item';
   const info=document.createElement('div');info.className='cart-item-info';
   const name=document.createElement('h2');name.textContent=item.product_name;
-  const unit=document.createElement('p');unit.textContent=fmt(price)+' за единицу';info.append(name,unit);
+  const unit=document.createElement('p');unit.textContent=fmt(price)+(typeof item.unit === 'string' && item.unit.trim() ? ' / '+item.unit : ' за единицу');info.append(name,unit);
   const controls=document.createElement('div');controls.className='cart-item-controls';
   const stepper=document.createElement('div');stepper.className='cart-stepper';
   const minus=document.createElement('button');minus.type='button';minus.textContent='−';minus.setAttribute('aria-label','Уменьшить количество: '+item.product_name);minus.onclick=()=>{setQty(id,quantity-1);renderCart();};

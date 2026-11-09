@@ -23,6 +23,7 @@
 <div class="checkout-money"><span>Товары</span><strong>{{ number_format($quote['subtotal'],2,',',' ') }} ₸</strong></div>
 <div class="checkout-money"><span>Доставка</span><strong>{{ number_format((float) config('pilot.delivery_fee', 3000),0,',',' ') }} ₸</strong></div>
 <div class="checkout-grand"><span>С доставкой</span><strong id="pilot-total">{{ number_format($quote['subtotal'] + (float) config('pilot.delivery_fee',3000),2,',',' ') }} ₸</strong></div>
+@include('shop.partials.consumer-links')
 <label class="checkout-consent"><input type="checkbox" name="consent" value="1" required><span>Согласен(на) на обработку данных для оформления и доставки заказа. <a href="{{ route('privacy') }}" target="_blank" rel="noopener">Подробнее</a></span></label>
 <input type="hidden" name="expected_total" id="expected_total" value="{{ number_format($quote['subtotal'] + (float) config('pilot.delivery_fee',3000),2,'.','') }}">
 <button class="btn btn-primary btn-block btn-lg" id="confirm-order">Подтвердить и перейти к оплате</button>

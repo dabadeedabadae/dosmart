@@ -63,6 +63,10 @@ p { margin:5px 0; }
 </div>
 <p class="section small center">Связь с магазином: {{ config('pilot.service_hours') }}<br>{{ config('pilot.service_timezone_label') }}</p>
 <div class="signature"><strong>ПОЛУЧИЛ</strong> <span class="signature-line"></span><p class="small center">подпись получателя</p></div>
+@unless($publicReceipt ?? false)
+<p class="small">Дата и время передачи: __________________</p>
+<p class="small">Замечания: ___________________________</p>
+@endunless
 </main>
 @endfor
 </body>

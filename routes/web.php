@@ -37,6 +37,7 @@ Route::post('/o/{code}/payment-reported', [\App\Http\Controllers\Shop\PilotContr
 Route::post('/o/{code}/changes', [\App\Http\Controllers\Shop\PilotController::class, 'requestChanges'])->middleware('throttle:10,1')->name('pilot.changes');
 Route::get('/o/{code}/status', [\App\Http\Controllers\Shop\PilotController::class, 'status'])->middleware('throttle:30,1')->name('pilot.status');
 Route::get('/o/{code}/receipt', [\App\Http\Controllers\Shop\PilotController::class, 'receipt'])->middleware('throttle:30,1')->name('pilot.receipt');
+Route::get('/help/{topic?}', [\App\Http\Controllers\Shop\ConsumerHelpController::class, 'show'])->name('shop.help');
 Route::view('/privacy', 'shop.privacy')->name('privacy');
 
 

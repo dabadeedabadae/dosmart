@@ -60,6 +60,7 @@
 <button class="btn btn-ghost" type="button" onclick="copyPayment(this.dataset.value)" data-value="{{ number_format($order->total,2,'.','') }}">Скопировать сумму</button>
 <button class="btn btn-ghost" type="button" onclick="copyPayment(this.dataset.value)" data-value="{{ $order->order_number }}">Скопировать номер</button>
 <ol style="padding-left:22px;line-height:1.8;margin:20px 0"><li>Откройте Kaspi и самостоятельно введите сумму <strong>{{ number_format($order->total,2,',',' ') }} ₸</strong>.</li><li>Если доступен комментарий к платежу, укажите номер заявки {{ $order->order_number }} и ФИО получателя.</li><li><strong>После оплаты отправьте квитанцию в WhatsApp сотруднику и укажите номер заявки и ФИО получателя.</strong></li><li>Вернитесь сюда и нажмите «Я оплатил». Сотрудник проверит поступление денег.</li></ol>
+@include('shop.partials.consumer-links')
 @if($kaspiUrl)<a class="btn btn-primary btn-block" href="{{ $kaspiUrl }}" target="_blank" rel="noopener noreferrer">Оплатить через Kaspi ↗</a>@else<p class="form-errors">Ссылка Kaspi пока не настроена. Свяжитесь с сотрудником.</p>@endif
 <form method="POST" action="{{ route('pilot.report-payment', $order->draft->code) }}" style="margin-top:12px">@csrf<input type="hidden" name="revision" value="{{ $revision }}"><button class="btn btn-ghost btn-block" type="submit">Я оплатил — передать на проверку</button></form>
 @elseif($order->status === 'cancelled')<p>Заявка отменена. Не оплачивайте её.</p>
