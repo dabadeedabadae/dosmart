@@ -56,7 +56,10 @@
 @if($pendingChange)<p>Оплата появится после рассмотрения изменений сотрудником.</p>
 @elseif($order->status === 'new')<p>Заявка получена. Сотрудник согласует состав и доставку с родственником. После этого здесь появится кнопка оплаты. Пока оплачивать не нужно.</p>
 @elseif($order->status === 'pending' && $order->payment_reported_at)<h3>Заказ в обработке</h3><p>Вы сообщили об оплате. Сотрудник проверяет поступление денег. Повторно платить не нужно. <strong>Отправьте квитанцию в WhatsApp сотруднику и укажите номер заявки и ФИО получателя.</strong></p>
-@elseif($order->status === 'pending')
+@elseif($order->status === 'pending' && $order->payment_status === 'unpaid')
+@if($paymentLinkChanged)
+<p><strong>Если вы уже оплатили по прежней ссылке, не платите повторно. Отправьте квитанцию сотруднику.</strong></p>
+@endif
 <button class="btn btn-ghost" type="button" onclick="copyPayment(this.dataset.value)" data-value="{{ number_format($order->total,2,'.','') }}">Скопировать сумму</button>
 <button class="btn btn-ghost" type="button" onclick="copyPayment(this.dataset.value)" data-value="{{ $order->order_number }}">Скопировать номер</button>
 <ol style="padding-left:22px;line-height:1.8;margin:20px 0"><li>Откройте Kaspi и самостоятельно введите сумму <strong>{{ number_format($order->total,2,',',' ') }} ₸</strong>.</li><li>Если доступен комментарий к платежу, укажите номер заявки {{ $order->order_number }} и ФИО получателя.</li><li><strong>После оплаты отправьте квитанцию в WhatsApp сотруднику и укажите номер заявки и ФИО получателя.</strong></li><li>Вернитесь сюда и нажмите «Я оплатил». Сотрудник проверит поступление денег.</li></ol>

@@ -42,10 +42,11 @@ class OrderWhatsAppMessage
         } elseif ($order->status === 'pending' && $order->payment_reported_at) {
             $main = $message('Проверяем оплату', 'Вы сообщили об оплате. Проверяем поступление денег. *Повторно платить не нужно*.' . "\n" . 'Если ещё не отправили квитанцию, прикрепите её *в WhatsApp сотруднику* и укажите *номер заявки и ФИО получателя*.');
         } elseif ($order->status === 'pending' && $unpaid) {
-            $kaspiUrl = (string) config('pilot.kaspi_url');
-            $validKaspi = filter_var($kaspiUrl, FILTER_VALIDATE_URL) && parse_url($kaspiUrl, PHP_URL_SCHEME) === 'https';
-            if ($link && $validKaspi) {
-                $main = $message('Согласовано — оплата', '*К оплате: '.$money($order->total).'*' . "\n" . 'Доставка: *'.$money($order->delivery_fee).'*.' . "\n\n" . 'Kaspi: '.$kaspiUrl . "\n" . 'Введите точную сумму. Квитанцию отправьте *в WhatsApp сотруднику* и укажите *номер заявки и ФИО получателя*.' . "\n" . 'Затем нажмите *«Я оплатил»* на странице заказа. Проверим поступление денег.'.$page);
+            $links = app(OrderPaymentLink::class);
+            $kaspiUrl = $links->forOrder($order);
+            $cutoverNote = $links->replacement($order) ? "\n\nЕсли уже оплатили по прежней ссылке, не платите повторно. Отправьте квитанцию сотруднику." : '';
+            if ($link && $kaspiUrl) {
+                $main = $message('Согласовано — оплата', '*К оплате: '.$money($order->total).'*' . "\n" . 'Доставка: *'.$money($order->delivery_fee).'*.' . "\n\n" . 'Kaspi: '.$kaspiUrl . "\n" . 'Введите точную сумму. Квитанцию отправьте *в WhatsApp сотруднику* и укажите *номер заявки и ФИО получателя*.' . "\n" . 'Затем нажмите *«Я оплатил»* на странице заказа. Проверим поступление денег.'.$cutoverNote.$page);
                 $templates['payment_help'] = $message('Как оплатить и отправить квитанцию', '1. В Kaspi введите *'.$money($order->total).'*.' . "\n" . '2. Если доступен комментарий к платежу, укажите *номер заявки и ФИО получателя*.' . "\n" . '3. Квитанцию отправьте *в WhatsApp сотруднику* вместе с этими данными.' . "\n" . '4. На странице заказа нажмите *«Я оплатил»*. Дождитесь проверки поступления денег.'.$page);
                 $templates['reminder'] = $message('Напомнить об оплате', 'Заказ согласован. Ожидаем оплату *'.$money($order->total).'*. Если уже оплатили, отправьте квитанцию — сначала проверим платёж, повторно не платите.'.$page);
             } else {

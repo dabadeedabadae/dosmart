@@ -5,6 +5,8 @@ return [
     'terminal_institution_map' => json_decode(env('TERMINAL_INSTITUTION_MAP', '{}'), true) ?: [],
     'terminal_token' => env('TERMINAL_API_TOKEN', ''),
     'kaspi_url' => env('KASPI_PAYMENT_URL', ''),
+    'kaspi_replacement_url' => env('DOSMART_KASPI_REPLACEMENT_URL', ''),
+    'kaspi_protected_orders' => array_map('trim', explode(',', (string) env('DOSMART_KASPI_PROTECTED_ORDERS', ''))),
     'whatsapp' => env('DOSMART_WHATSAPP', ''),
     'draft_days' => 4,
     'delivery_fee' => 3000,

@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderDraft;
 use App\Models\Product;
 use App\Services\OrderChanges;
+use App\Services\OrderPaymentLink;
 use App\Services\PilotCheckout;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -163,17 +164,19 @@ class PilotController extends Controller
     private function pageData(Order $order): array
     {
         $order->load(['items.product', 'changeRequests', 'statusHistory']);
-        $kaspiUrl = (string) config('pilot.kaspi_url');
-        if (! filter_var($kaspiUrl, FILTER_VALIDATE_URL) || parse_url($kaspiUrl, PHP_URL_SCHEME) !== 'https') {
-            $kaspiUrl = '';
-        }
+        $links = app(OrderPaymentLink::class);
+        $kaspiUrl = $links->forOrder($order);
+        $replacement = $links->replacement($order);
+        $revision = app(OrderChanges::class)->revision($order);
         $pendingChange = $order->changeRequests->where('status', 'pending')->first();
 
         return ['order' => $order, 'kaspiUrl' => $kaspiUrl,
             'catalogProducts' => app(OrderChanges::class)->editable($order) && ! $pendingChange
                 ? Product::active()->with('category')->whereNotIn('id', $order->items->pluck('product_id')->filter())->orderBy('name')->get() : collect(),
             'whatsapp' => preg_replace('/\D/', '', (string) config('pilot.whatsapp')),
-            'revision' => app(OrderChanges::class)->revision($order),
+            'revision' => $revision,
+            'screenRevision' => $replacement ? hash('sha256', $revision.'|'.$replacement) : $revision,
+            'paymentLinkChanged' => $replacement !== '',
             'pendingChange' => $pendingChange,
             'editable' => app(OrderChanges::class)->editable($order) && ! $pendingChange,
         ];
@@ -184,8 +187,8 @@ class PilotController extends Controller
         $draft = $this->draft($code);
         abort_unless($draft->order_id, 404);
         $data = $this->pageData($draft->order);
-        $result = ['status' => $draft->order->status, 'label' => $data['pendingChange'] ? 'Согласование изменений' : $draft->order->customer_status_label, 'revision' => $data['revision']];
-        if ($request->has('revision') && $request->input('revision') !== $data['revision']) {
+        $result = ['status' => $draft->order->status, 'label' => $data['pendingChange'] ? 'Согласование изменений' : $draft->order->customer_status_label, 'revision' => $data['screenRevision']];
+        if ($request->has('revision') && $request->input('revision') !== $data['screenRevision']) {
             $result['html'] = view('shop.partials.order-details', $data)->render();
         }
 

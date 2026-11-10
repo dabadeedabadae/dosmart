@@ -19,7 +19,7 @@
 @endsection
 @section('scripts')
 <script>
-let revision = @json($revision), busy = false, dirty = false, pendingUpdate = null;
+let revision = @json($screenRevision), busy = false, dirty = false, pendingUpdate = null;
 document.addEventListener('input', event => { if(event.target.closest('[data-change-form]')) dirty = true; });
 function updateDetails(data) {
  document.getElementById('order-details').innerHTML = data.html;

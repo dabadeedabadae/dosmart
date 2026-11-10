@@ -38,6 +38,7 @@
         @endforeach
         <dl style="display:grid;gap:4px;margin-top:18px">
             @foreach($fields as $key => $value)
+                @continue(blank($value) && !config('consumer.preview'))
                 <dt style="font-weight:700">{{ $copy['fields'][$key] }}</dt>
                 <dd style="margin:0 0 10px;white-space:pre-line">{{ $value ?: $copy['pending'] }}</dd>
             @endforeach

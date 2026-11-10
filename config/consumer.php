@@ -26,8 +26,11 @@ $details = [
 return [
     'preview' => env('APP_ENV') === 'local',
     'published' => env('DOSMART_CONSUMER_PAGES_APPROVED', false)
-        && collect($seller + $details)->every(fn ($value) => is_string($value) && trim($value) !== '')
-        && filter_var($seller['email'], FILTER_VALIDATE_EMAIL),
+        && collect($seller)->every(fn ($value) => is_string($value) && trim($value) !== '')
+        && filter_var($seller['email'], FILTER_VALIDATE_EMAIL)
+        && (collect($details)->every(fn ($value) => is_string($value) && trim($value) !== '')
+            || (env('DOSMART_CONSUMER_PAGES_PARTIAL_APPROVED', false)
+                && filled($details['delivery_ru']) && filled($details['delivery_kk']))),
     'seller' => $seller,
     'details' => $details,
 ];

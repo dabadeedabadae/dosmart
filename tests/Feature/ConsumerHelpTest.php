@@ -42,4 +42,47 @@ class ConsumerHelpTest extends TestCase
         ])->assertRedirect('/o/'.$code.'/payment');
         $this->get('/o/'.$code.'/payment')->assertOk()->assertSee('Возврат и претензии');
     }
+
+    public function test_cutover_updates_only_unpaid_orders_and_refreshes_open_pages(): void
+    {
+        config(['pilot.kaspi_url' => 'https://pay.kaspi.kz/pay/old']);
+        $order = \App\Models\Order::create([
+            'order_number' => 'DOS-CUTOVER', 'display_number' => '0710925',
+            'prisoner_name' => 'Тестовый получатель', 'institution_name' => 'Демо', 'contact_phone' => '',
+            'status' => 'pending', 'payment_status' => 'unpaid', 'subtotal' => 950, 'delivery_fee' => 3000, 'total' => 3950,
+        ]);
+        $draft = \App\Models\OrderDraft::create([
+            'request_id' => (string) Str::uuid(), 'code' => 'CUTOVER2', 'source' => 'website',
+            'items' => [], 'expires_at' => now()->addDay(), 'order_id' => $order->id,
+        ]);
+        $path = '/o/'.$draft->code;
+        $revision = app(\App\Services\OrderChanges::class)->revision($order->fresh());
+        $this->get($path.'/payment')->assertOk()->assertSee('https://pay.kaspi.kz/pay/old');
+        config(['pilot.kaspi_replacement_url' => 'https://pay.kaspi.kz/pay/new']);
+        $this->getJson($path.'/status?revision='.$revision)->assertOk()->assertJsonStructure(['html', 'revision']);
+        $this->get($path.'/payment')->assertOk()->assertSee('https://pay.kaspi.kz/pay/new')->assertDontSee('https://pay.kaspi.kz/pay/old');
+        $this->assertStringContainsString('https://pay.kaspi.kz/pay/new',
+            app(\App\Services\OrderWhatsAppMessage::class)->templates($order)['main']['text']);
+
+        config(['pilot.kaspi_protected_orders' => [$order->order_number]]);
+        $this->getJson($path.'/status?revision='.$revision)->assertOk()->assertJsonMissingPath('html');
+        $this->get($path.'/payment')->assertOk()->assertSee('https://pay.kaspi.kz/pay/old')->assertDontSee('https://pay.kaspi.kz/pay/new');
+        $this->assertStringContainsString('https://pay.kaspi.kz/pay/old',
+            app(\App\Services\OrderWhatsAppMessage::class)->templates($order)['main']['text']);
+
+        config(['pilot.kaspi_protected_orders' => []]);
+        $this->post($path.'/payment-reported', ['revision' => $revision])->assertRedirect();
+        $this->get($path.'/payment')->assertOk()->assertDontSee('https://pay.kaspi.kz/pay/new')->assertDontSee('https://pay.kaspi.kz/pay/old');
+        $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $order->update(['status' => 'processing', 'payment_status' => 'paid']);
+        $this->get($path.'/payment')->assertOk()->assertDontSee('https://pay.kaspi.kz/pay/new');
+    }
+
+    public function test_published_help_omits_unconfirmed_details(): void
+    {
+        config(['consumer.preview' => false, 'consumer.published' => true]);
+        $this->get('/help/delivery')->assertOk()->assertDontSee('Ожидает подтверждения владельца ИП')
+            ->assertDontSee('Как получить фискальный чек');
+    }
+
 }
