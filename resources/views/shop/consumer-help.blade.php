@@ -19,6 +19,10 @@
             @foreach($copy['topics'] as $key => $label)
                 <li><a class="btn btn-ghost btn-block" href="{{ route('shop.help', ['topic' => $key, 'lang' => $locale]) }}">{{ $label }}</a></li>
             @endforeach
+            <li><a class="btn btn-ghost btn-block" href="{{ route('shop.index') }}#catalog">{{ $copy['catalog'] }}</a></li>
+            @if($hasGuide)
+                <li><a class="btn btn-ghost btn-block" href="{{ route('shop.help.download') }}">{{ $copy['guide_download'] }}</a></li>
+            @endif
         </ul>
     @else
         @php
@@ -31,23 +35,28 @@
                 'terms' => ['acceptance' => $details['acceptance_'.$locale], 'delivery' => $details['delivery_'.$locale], 'refusal' => $details['refusal_'.$locale]],
                 'returns' => ['email' => $seller['email'], 'address' => $seller['address_'.$locale], 'refusal' => $details['refusal_'.$locale]],
                 'privacy' => ['name' => $seller['name'], 'email' => $seller['email'], 'data' => $details['data_'.$locale]],
+                'rights' => [],
             };
         @endphp
         @foreach($copy[$topic] ?? [] as $paragraph)
             <p style="margin:10px 0">{{ str_replace(':fee', $fee, $paragraph) }}</p>
         @endforeach
-        <dl style="display:grid;gap:4px;margin-top:18px">
-            @foreach($fields as $key => $value)
-                @continue(blank($value) && !config('consumer.preview'))
-                <dt style="font-weight:700">{{ $copy['fields'][$key] }}</dt>
-                <dd style="margin:0 0 10px;white-space:pre-line">{{ $value ?: $copy['pending'] }}</dd>
-            @endforeach
-        </dl>
-        @if(in_array($topic, ['seller', 'returns'], true))
+        @if($fields)
+            <dl style="display:grid;gap:4px;margin-top:18px">
+                @foreach($fields as $key => $value)
+                    @continue(blank($value) && !config('consumer.preview'))
+                    <dt style="font-weight:700">{{ $copy['fields'][$key] }}</dt>
+                    <dd style="margin:0 0 10px;white-space:pre-line">{{ $value ?: $copy['pending'] }}</dd>
+                @endforeach
+            </dl>
+        @endif
+        @if(in_array($topic, ['seller', 'returns', 'rights'], true))
             <p>{{ $copy['appeal'] }}</p>
             <ul style="margin:8px 0 0;padding-inline-start:20px">
                 <li><a href="https://www.gov.kz/org/mti-kzpp/contacts?lang={{ $locale }}">{{ $copy['authority'] }}</a></li>
                 <li><a href="https://eotinish.kz/{{ $locale }}">{{ $copy['submit_appeal'] }}</a></li>
+                <li><a href="https://www.gov.kz/org/mti-kzpp/documents/details/367552?lang={{ $locale }}">{{ $copy['dispute_directory'] }}</a></li>
+                <li><a href="https://adilet.zan.kz/{{ $copy['law_locale'] }}/docs/Z100000274_">{{ $copy['law'] }}</a></li>
             </ul>
         @endif
     @endif

@@ -49,8 +49,8 @@
     <div class="footer-links"><a href="{{ route('shop.index') }}">Каталог товаров</a><a href="{{ route('shop.orders') }}">Мои заказы</a></div>
     <div class="footer-links">
         @if(config('consumer.preview') || config('consumer.published'))
-            <a href="{{ route('shop.help') }}">Помощь покупателю</a>
-            <a lang="kk" href="{{ route('shop.help', ['lang' => 'kk']) }}">Сатып алушыға көмек</a>
+            <a href="{{ route('shop.help') }}">{{ trans('consumer.title', locale: 'ru') }}</a>
+            <a lang="kk" href="{{ route('shop.help', ['lang' => 'kk']) }}">{{ trans('consumer.title', locale: 'kk') }}</a>
         @endif
         <a href="{{ route('privacy') }}">Обработка данных</a><a href="{{ route('admin.login') }}">Вход для сотрудников</a></div>
 </div></footer>

@@ -38,6 +38,7 @@ Route::post('/o/{code}/changes', [\App\Http\Controllers\Shop\PilotController::cl
 Route::get('/o/{code}/status', [\App\Http\Controllers\Shop\PilotController::class, 'status'])->middleware('throttle:30,1')->name('pilot.status');
 Route::get('/o/{code}/receipt', [\App\Http\Controllers\Shop\PilotController::class, 'receipt'])->middleware('throttle:30,1')->name('pilot.receipt');
 Route::get('/help/{topic?}', [\App\Http\Controllers\Shop\ConsumerHelpController::class, 'show'])->name('shop.help');
+Route::get('/help/documents/consumer-guide', [\App\Http\Controllers\Shop\ConsumerHelpController::class, 'download'])->name('shop.help.download');
 Route::view('/privacy', 'shop.privacy')->name('privacy');
 
 
