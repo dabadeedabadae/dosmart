@@ -45,7 +45,10 @@
         </dl>
         @if(in_array($topic, ['seller', 'returns'], true))
             <p>{{ $copy['appeal'] }}</p>
-            <p style="margin-top:8px"><a href="https://www.gov.kz/org/mti-kzpp/press/news/details/428097?lang={{ $locale }}">{{ $copy['authority'] }}</a></p>
+            <ul style="margin:8px 0 0;padding-inline-start:20px">
+                <li><a href="https://www.gov.kz/org/mti-kzpp/contacts?lang={{ $locale }}">{{ $copy['authority'] }}</a></li>
+                <li><a href="https://eotinish.kz/{{ $locale }}">{{ $copy['submit_appeal'] }}</a></li>
+            </ul>
         @endif
     @endif
 </article>
