@@ -65,7 +65,7 @@
             <div class="form-group">
                 <label class="form-label">Описание</label>
                 <textarea name="description" class="form-control"
-                          placeholder="Сведения с этикетки: изготовитель, состав, условия хранения и срок годности">{{ old('description', $product->description ?? '') }}</textarea>
+                          placeholder="Краткое описание товара (необязательно)">{{ old('description', $product->description ?? '') }}</textarea>
             </div>
 
             <div class="form-group">

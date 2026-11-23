@@ -8,6 +8,17 @@
             button.setAttribute('aria-expanded', String(open));
             button.textContent = open ? 'Закрыть меню' : 'Меню';
         });
+        const more = document.querySelector('.admin-tabbar-more');
+        if (more) {
+            more.setAttribute('aria-expanded', 'false');
+            more.addEventListener('click', () => {
+                button.click();
+                const open = document.body.classList.contains('admin-menu-open');
+                more.setAttribute('aria-expanded', String(open));
+                more.classList.toggle('is-active', open);
+                if (open) window.scrollTo({top: 0, behavior: 'smooth'});
+            });
+        }
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && document.body.classList.contains('admin-menu-open')) {
                 document.body.classList.remove('admin-menu-open');
@@ -16,6 +27,10 @@
                 button.focus();
             }
         });
+    }
+    // Фильтры свёрнуты на телефоне, на компьютере открыты.
+    if (window.matchMedia('(min-width: 761px)').matches) {
+        document.querySelectorAll('details[data-desktop-open]').forEach(details => { details.open = true; });
     }
     document.querySelectorAll('.main .table-wrap table').forEach(table => {
         const headers = Array.from(table.querySelectorAll('thead tr:first-child th'), th => th.textContent.trim());

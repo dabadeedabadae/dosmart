@@ -85,17 +85,19 @@ class PilotCheckout
             if ((int) round($data['expected_total'] * 100) !== (int) round(($quote['subtotal'] + $fee) * 100)) {
                 throw ValidationException::withMessages(['items' => 'Цена товаров изменилась. Обновите страницу и проверьте новую сумму.']);
             }
-            $institution = Institution::where('is_active', true)->findOrFail($data['institution_id']);
+            $institution = Institution::where('is_active', true)->lockForUpdate()->findOrFail($data['institution_id']);
             $order = Order::create([
                 'display_number' => app(OrderNumbers::class)->next($institution->id),
                 'order_number' => 'DOS-'.$draft->code, 'customer_id' => $customerId,
                 'squad_number' => $data['squad_number'] ?? null,
                 'prisoner_name' => $data['prisoner_name'], 'institution_id' => $institution->id,
                 'institution_name' => $institution->name, 'contact_phone' => $data['contact_phone'],
+                'relative_name' => $data['relative_name'] ?? null,
                 'subtotal' => $quote['subtotal'], 'delivery_fee' => $fee, 'total' => $quote['subtotal'] + $fee,
                 'delivery_type' => $data['delivery_type'], 'consented_at' => now(), 'consent_version' => config('pilot.consent_version'),
                 'status' => 'pending', 'payment_status' => 'unpaid',
             ]);
+            app(PrisonerAccounts::class)->reserveParcel($order, $institution, $data['parcel_code'] ?? null, $data['recipient_birth_date'] ?? null);
             $order->items()->createMany($quote['items']);
             $order->statusHistory()->create(['status' => 'pending', 'comment' => 'Оформлен родственником. Согласие: '.config('pilot.consent_version')]);
             $draft->update(['order_id' => $order->id]);

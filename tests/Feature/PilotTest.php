@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Institution;
 use App\Models\Order;
 use App\Models\OrderDraft;
+use App\Models\Prisoner;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\PilotCheckout;
@@ -29,7 +30,31 @@ class PilotTest extends TestCase
     {
         $institution = Institution::create(['name' => 'Учреждение 1', 'city' => 'Алматы', 'is_active' => true]);
 
-        return ['prisoner_name' => 'Тестовый Получатель', 'institution_id' => $institution->id, 'contact_phone' => '+77001112233', 'delivery_type' => 'standard', 'consent' => 1, 'expected_total' => 5500];
+        return ['prisoner_name' => 'Тестовый Получатель', 'relative_name' => 'Отправитель Тестовый', 'institution_id' => $institution->id, 'contact_phone' => '+77001112233', 'delivery_type' => 'standard', 'consent' => 1, 'expected_total' => 5500];
+    }
+
+    public function test_relative_sees_only_recipient_limits_by_full_name_institution_and_birth_date(): void
+    {
+        $draft = $this->draft();
+        $institution = Institution::create(['name' => 'Учреждение 1', 'city' => 'Алматы', 'is_active' => true]);
+        $prisoner = Prisoner::create(['full_name' => 'Тестов Арман Серикович', 'institution_id' => $institution->id,
+            'condition' => 'ordinary', 'spending_mode' => 'custom', 'monthly_limit_minor' => 2_000_000, 'parcel_code' => strtoupper(Str::random(24))]);
+        $prisoner->forceFill(['birth_date' => '1990-03-15', 'registered_at' => now(), 'balance_minor' => 5_000_000,
+            'limit_started_on' => now('Asia/Almaty')->startOfMonth()])->save();
+        $url = '/o/'.$draft->code.'/recipient-limits';
+
+        $this->get('/o/'.$draft->code)->assertOk()->assertSee('Показать лимиты получателя');
+        $ask = fn (array $over) => $this->postJson($url, $over + ['institution_id' => $institution->id, 'prisoner_name' => 'тестов арман серикович', 'birth_date' => '1990-03-15']);
+        $ask([])->assertOk()->assertExactJson([
+            'monthly_limit_minor' => 2_000_000, 'monthly_remaining_minor' => 2_000_000, 'parcels_available' => null, 'parcel_budget_minor' => null,
+        ])->assertJsonMissingPath('balance_minor');
+        // Неполное ФИО, другая дата или другое учреждение — ничего не показываем.
+        $ask(['prisoner_name' => 'Тестов Арман'])->assertNotFound();
+        $ask(['birth_date' => '1990-03-16'])->assertNotFound();
+        $ask(['institution_id' => $institution->id + 1])->assertNotFound();
+        // Пока человек не зарегистрировался в кабинете — тоже нет.
+        $prisoner->forceFill(['registered_at' => null])->save();
+        $ask([])->assertNotFound();
     }
 
     public function test_only_standard_delivery_and_formatted_phone_are_accepted(): void

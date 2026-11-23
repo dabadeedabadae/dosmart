@@ -117,6 +117,7 @@ class OrderChanges
                 if ($subtotal <= 0 || $subtotal > 9000000000) {
                     throw ValidationException::withMessages(['changes' => 'Недопустимая сумма заказа.']);
                 }
+                app(PrisonerAccounts::class)->checkParcelIncrease($order, $subtotal);
                 $order->update(['subtotal' => $subtotal / 100, 'total' => ($subtotal + (int) round((float) $order->delivery_fee * 100)) / 100]);
             }
             $change->update(['status' => $data['decision'], 'reviewed_by' => $userId, 'reviewed_at' => now(), 'response' => $data['response'] ?? null]);

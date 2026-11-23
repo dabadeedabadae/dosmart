@@ -48,6 +48,7 @@
     <div><a class="logo footer-logo" href="{{ route('shop.index') }}">@include('shop.partials.logo')</a><p>Обычные покупки. Важная забота.</p></div>
     <div class="footer-links"><a href="{{ route('shop.index') }}">Каталог товаров</a><a href="{{ route('shop.orders') }}">Мои заказы</a></div>
     <div class="footer-links">
+        <a href="{{ route('family.form') }}">Баланс родственника по коду</a>
         @if(config('consumer.preview') || config('consumer.published'))
             <a href="{{ route('shop.help') }}">{{ trans('consumer.title', locale: 'ru') }}</a>
             <a lang="kk" href="{{ route('shop.help', ['lang' => 'kk']) }}">{{ trans('consumer.title', locale: 'kk') }}</a>

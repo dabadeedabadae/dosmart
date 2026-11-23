@@ -55,7 +55,7 @@ class InstitutionController extends Controller
 
     public function destroy(Institution $institution)
     {
-        if ($institution->orders()->exists() || $institution->drafts()->exists()) {
+        if ($institution->orders()->exists() || $institution->drafts()->exists() || $institution->prisoners()->exists()) {
             return redirect()->route('admin.institutions.index')->with('error', "Нельзя удалить учреждение «{$institution->name}» — с ним связаны заказы или черновики. Вместо удаления отключите его активность.");
         }
         $institution->delete();

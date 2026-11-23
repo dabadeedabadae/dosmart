@@ -28,13 +28,13 @@ p { margin:5px 0; }
 </style>
 </head>
 <body>
-@php($receiptCopies = ($publicReceipt ?? false) ? 1 : 2)
-<div class="controls"><button type="button" onclick="window.print()">Печать / сохранить PDF</button><p>Для электронного файла выберите «Сохранить как PDF». Для принтера выберите бумагу 80 мм, масштаб 100%. Отключите колонтитулы браузера. @if($receiptCopies === 2)Подготовлены 2 экземпляра. В окне печати оставьте 1 копию, чтобы не получить 4 чека.@else Количество экземпляров задаётся в окне печати.@endif</p></div>
+@php($receiptCopies = ($publicReceipt ?? false) ? 1 : 3)
+<div class="controls"><button type="button" onclick="window.print()">Печать / сохранить PDF</button><p>Для электронного файла выберите «Сохранить как PDF». Для принтера выберите бумагу 80 мм, масштаб 100%. Отключите колонтитулы браузера. @if($receiptCopies > 1)Подготовлено {{ $receiptCopies }} экземпляра. В окне печати оставьте 1 копию, чтобы распечатать комплект один раз.@else Количество экземпляров задаётся в окне печати.@endif</p></div>
 @for($copy = 1; $copy <= $receiptCopies; $copy++)
 <main class="receipt">
 @php($money = fn($value) => number_format((float)$value, 2, ',', ' ').' тг')
 <h1>Dosmart</h1>
-@if($receiptCopies === 2)<p class="center small">Экземпляр {{ $copy }} из 2</p>@endif
+@if($receiptCopies > 1)<p class="center small">Экземпляр {{ $copy }} из {{ $receiptCopies }}</p>@endif
 <p class="center small">Лист заказа · не фискальный чек</p>
 <h2>Заявка № {{ $order->order_number }}</h2>
 @unless($publicReceipt ?? false)
@@ -62,11 +62,12 @@ p { margin:5px 0; }
 @if((float)$order->refund_amount > 0)<p>Возвращено: {{ $money($order->refund_amount) }}</p>@endif
 </div>
 <p class="section small center">Связь с магазином: {{ config('pilot.service_hours') }}<br>{{ config('pilot.service_timezone_label') }}</p>
-<div class="signature"><strong>ПОЛУЧИЛ</strong> <span class="signature-line"></span><p class="small center">подпись получателя</p></div>
+<div class="signature">
 @unless($publicReceipt ?? false)
-<p class="small">Дата и время передачи: __________________</p>
-<p class="small">Замечания: ___________________________</p>
+<p><strong>Кому заказали (ФИО):</strong><br>{{ $order->prisoner_name ?: '____________________________' }}</p>
+<p><strong>От кого (ФИО):</strong><br>{{ $order->prisoner_order_type === 'balance' ? 'Сам получатель — оплата с баланса Dosmart' : ($order->relative_name ?: '____________________________') }}</p>
 @endunless
+<strong>ПОЛУЧИЛ</strong> <span class="signature-line"></span><p class="small center">подпись получателя</p></div>
 </main>
 @endfor
 </body>

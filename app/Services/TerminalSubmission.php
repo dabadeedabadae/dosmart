@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Institution;
 use App\Models\Order;
 use App\Models\OrderDraft;
 use Illuminate\Support\Facades\DB;
@@ -45,6 +46,10 @@ class TerminalSubmission
                 'status' => 'new', 'payment_status' => 'unpaid',
                 'consented_at' => now(), 'consent_version' => config('pilot.consent_version'),
             ]);
+            if (isset($data['prisoner'])) {
+                $institution = Institution::whereKey($data['institution_id'])->lockForUpdate()->firstOrFail();
+                app(PrisonerAccounts::class)->reserveParcelFor($order, $institution, $data['prisoner']);
+            }
             $order->items()->createMany($quote['items']);
             $order->statusHistory()->create(['status' => 'new', 'comment' => $source === 'website'
                 ? 'Заявка из отдельного приложения DoSmart. Свяжитесь с родственником по WhatsApp и согласуйте состав, доставку и оплату. Данные введены пользователем.'

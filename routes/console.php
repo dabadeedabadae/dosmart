@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\OrderDraft;
+use App\Models\Prisoner;
 use App\Models\User;
+use App\Services\PrisonerAccounts;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -11,6 +13,21 @@ Artisan::command('drafts:prune', function () {
     $this->info("Удалено черновиков: {$count}");
 })->purpose('Удалить неоформленные корзины старше 4 дней');
 Schedule::command('drafts:prune')->daily()->withoutOverlapping();
+
+// Каждый день запоминаем лимит текущего месяца у всех, у кого лимит включён.
+// Тогда перенос остатка считается по лимиту того месяца, даже если человек не заходил в кабинет.
+Artisan::command('limits:snapshot', function (PrisonerAccounts $accounts) {
+    $count = 0;
+    Prisoner::with('institution')->where('spending_mode', '!=', 'unlimited')
+        ->chunkById(200, function ($prisoners) use ($accounts, &$count) {
+            foreach ($prisoners as $prisoner) {
+                $accounts->limitState($prisoner);
+                $count++;
+            }
+        });
+    $this->info("Лимиты сохранены: {$count}");
+})->purpose('Сохранить лимит текущего месяца для переноса остатка');
+Schedule::command('limits:snapshot')->dailyAt('00:10')->timezone('Asia/Almaty')->withoutOverlapping();
 
 Artisan::command('admin:create {username}', function () {
     $username = $this->argument('username');

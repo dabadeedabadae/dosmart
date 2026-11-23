@@ -1,5 +1,6 @@
 /* Admin only. Desktop tables and print layouts retain their original styles. */
 .admin-menu-toggle { display:none; }
+.admin-tabbar,.mobile-only { display:none; }
 .mobile-action-label { display:none; }
 .main { min-width:0; }
 @media screen and (max-width:1100px) {
@@ -65,4 +66,27 @@
  .recent-item { flex-wrap:wrap;gap:8px; }
  .recent-name { flex-basis:60%; }
  .recent-amount { margin-left:0; }
+ /* Нижняя панель разделов */
+ .admin-tabbar { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:50;
+   background:var(--surface);border-top:1px solid var(--border);padding:4px 4px calc(4px + env(safe-area-inset-bottom));box-shadow:0 -6px 18px oklch(23% 0.02 255 / .06); }
+ .admin-tabbar a,.admin-tabbar button { position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:54px;
+   border:0;background:none;border-radius:12px;color:var(--text-secondary);font:inherit;font-size:11.5px;font-weight:600;text-decoration:none;cursor:pointer; }
+ .admin-tabbar svg { width:22px;height:22px; }
+ .admin-tabbar .is-active { color:var(--accent);background:var(--accent-wash); }
+ .admin-tabbar-count { position:absolute;top:4px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;border-radius:9px;
+   background:oklch(58% 0.2 25);color:#fff;font-size:11px;line-height:18px;text-align:center; }
+ .main { padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
+ .admin-menu-toggle { display:none; }
+ .sidebar { position:sticky;top:0;z-index:40; }
+ .admin-menu-open .sidebar { max-height:100vh;overflow-y:auto; }
+ .mobile-only { display:flex; }
+ .alert { margin-bottom:14px; }
+ /* Позиции заказа: название, ниже «кол-во × цена» и сумма */
+ .mobile-cards.order-items tbody tr { display:grid;grid-template-columns:auto auto 1fr auto;align-items:baseline;gap:4px 6px;padding:12px 16px;border-bottom:1px solid var(--border); }
+ .mobile-cards.order-items tbody td { display:block;padding:0;text-align:left!important;width:auto!important; }
+ .mobile-cards.order-items tbody td::before { display:none; }
+ .mobile-cards.order-items tbody td:nth-child(1) { grid-column:1/-1;font-size:15px; }
+ .mobile-cards.order-items tbody td:nth-child(2) .mobile-cell-content::after { content:" ×"; }
+ .mobile-cards.order-items tbody td:nth-child(4) { grid-column:4;text-align:right!important;font-size:15px; }
+ .order-jump { width:100%; }
 }

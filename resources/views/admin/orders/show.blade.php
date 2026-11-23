@@ -31,6 +31,8 @@
     </div>
 </div>
 
+<a class="btn btn-primary mobile-only order-jump" href="#order-actions" style="margin-bottom:16px">Следующий шаг ↓</a>
+
 <div class="order-columns" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start">
 
     <div style="display:flex;flex-direction:column;gap:18px">
@@ -40,7 +42,7 @@
                 Состав заказа
             </div>
             <div class="table-wrap">
-                <table>
+                <table class="order-items">
                     <thead>
                         <tr>
                             <th>Товар</th>
@@ -125,6 +127,9 @@
                         </a>@else Не указан @endif
                     </div>
                 </div>
+                @if($order->prisoner_order_type === 'parcel')
+                <p><a href="{{ route('admin.prisoners.show', $order->prisoner_id) }}">Карточка получателя</a> · {{ ['reserved' => 'Передача в резерве', 'delivered' => 'Передача учтена', 'released' => 'Резерв снят'][$order->parcel_state] }}</p>
+                @endif
                 @if($order->relative_name)
                 <div>
                     <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:2px">Родственник</div>
@@ -144,6 +149,12 @@
             </div>
         </div>
 
+        @if($order->prisoner_order_type === 'balance')
+        <div class="card" style="padding:20px">
+            <h2 style="font-size:16px">Покупка с баланса Dosmart</h2>
+            <a href="{{ route('admin.prisoners.show', $order->prisoner_id) }}">Карточка получателя</a>
+        </div>
+        @else
         <div class="card" style="padding:20px">
             <h2 style="font-size:16px;margin-bottom:12px">Связаться и организовать оплату</h2>
             @php
@@ -181,6 +192,7 @@
         </div>
 
         @include('admin.orders.changes')
+        @endif
 
         @include('admin.orders.actions')
 

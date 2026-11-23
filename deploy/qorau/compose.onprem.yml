@@ -1,0 +1,78 @@
+name: dosmart
+x-app: &app
+  image: dosmart-app:additions20261013
+  mem_limit: 512m
+  env_file: .env.production
+  restart: unless-stopped
+  volumes:
+    - uploads:/var/www/html/storage/app/public
+    - ./docker/php-uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
+  networks: [frontend, backend]
+  depends_on:
+    postgres: {condition: service_healthy}
+  logging:
+    driver: json-file
+    options: {max-size: '20m', max-file: '3'}
+services:
+  app:
+    <<: *app
+  scheduler:
+    <<: *app
+    mem_limit: 128m
+    command: ['php', 'artisan', 'schedule:work']
+  web:
+    image: nginx:alpine
+    mem_limit: 128m
+    restart: unless-stopped
+    ports: ['127.0.0.1:8088:80']
+    volumes:
+      - ./public:/var/www/html/public:ro
+      - uploads:/var/www/html/public/storage:ro
+      - ./docker/nginx-server.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [frontend]
+    depends_on: [app]
+    logging:
+      driver: json-file
+      options: {max-size: '20m', max-file: '3'}
+  postgres:
+    image: postgres:16-alpine
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options: {max-size: '20m', max-file: '3'}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-dosmart}
+      POSTGRES_USER: ${DB_USERNAME:-dosmart}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Required}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  backup:
+    image: postgres:16-alpine
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: {max-size: '20m', max-file: '3'}
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${DB_DATABASE:-dosmart}
+      PGUSER: ${DB_USERNAME:-dosmart}
+      PGPASSWORD: ${DB_PASSWORD:?Required}
+    volumes: ['./docker/backup.sh:/backup.sh:ro', './backups:/backups']
+    entrypoint: ['/bin/sh', '-c', 'while true; do /bin/sh /backup.sh; sleep 86400; done']
+    networks: [backend]
+    depends_on:
+      postgres: {condition: service_healthy}
+networks:
+  frontend:
+  backend:
+    internal: true
+volumes:
+  postgres_data:
+  uploads:

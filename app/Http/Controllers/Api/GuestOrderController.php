@@ -7,6 +7,7 @@ use App\Models\Institution;
 use App\Services\TerminalSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class GuestOrderController extends Controller
 {
@@ -31,6 +32,15 @@ class GuestOrderController extends Controller
         ]);
         $data['institution_name'] = Institution::findOrFail($data['institution_id'])->name;
         $data['institution_id'] = (int) $data['institution_id'];
+        // Заказ «через родственника» из личного кабинета: получатель известен — проверяем его норму передач.
+        // Неизвестный или истёкший токен не мешает заказу: он оформляется как раньше (так не теряются заявки ни с какой версии приложения).
+        $prisoner = $request->bearerToken() !== null ? PrisonerAccountController::sessionPrisoner((string) $request->bearerToken()) : null;
+        if ($prisoner) {
+            if ((int) $prisoner->institution_id !== $data['institution_id']) {
+                throw ValidationException::withMessages(['institution_id' => 'Выберите своё учреждение.']);
+            }
+            $data['prisoner'] = $prisoner;
+        }
         $data['items'] = array_map(fn ($item) => ['product_id' => (int) $item['product_id'], 'quantity' => (int) $item['quantity']], $data['items']);
         // Public guest request, not a verified Soylephone identity. The random
         // client UUID isolates retries; neither credentials nor PII are returned.
