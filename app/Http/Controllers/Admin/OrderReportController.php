@@ -41,13 +41,26 @@ class OrderReportController extends Controller
                 // Different products and different historical names must not be merged accidentally.
                 $key = ($item->product_id ?? 'deleted').':'.$item->product_name;
                 if (!isset($shopping[$key])) {
-                    $shopping[$key] = ['name' => $item->product_name, 'quantity' => 0, 'orders' => []];
+                    $shopping[$key] = ['name' => $item->product_name, 'quantity' => 0, 'orders' => [], 'prices' => [], 'total' => 0.0];
                 }
                 $shopping[$key]['quantity'] += $item->quantity;
+                // Цена в заявке — цена магазина на момент заказа; у одного товара в разных заявках она может отличаться.
+                $shopping[$key]['prices'][(string) $item->price] = (float) $item->price;
+                $shopping[$key]['total'] += (float) $item->total;
                 $shopping[$key]['orders'][$order->id] = $order->order_number;
             }
         }
         usort($shopping, fn ($a, $b) => strnatcasecmp($a['name'], $b['name']));
+        $shoppingTotals = ['quantity' => array_sum(array_column($shopping, 'quantity')), 'total' => array_sum(array_column($shopping, 'total')), 'positions' => count($shopping)];
+        $active = $orders->whereNotIn('status', ['cancelled', 'refunded']);
+        $money = [
+            'Сумма заявок (без отменённых)' => $active->sum(fn ($o) => (float) $o->total),
+            'Из них товары' => $active->sum(fn ($o) => (float) $o->subtotal),
+            'Из них доставка' => $active->sum(fn ($o) => (float) $o->delivery_fee),
+            'Оплачено (подтверждено)' => $orders->where('payment_status', 'paid')->sum(fn ($o) => (float) $o->total),
+            'Ждём оплату' => $active->whereNotIn('payment_status', ['paid', 'refunded'])->sum(fn ($o) => (float) $o->total),
+            'Возвращено' => $orders->sum(fn ($o) => (float) ($o->refund_amount ?? 0)),
+        ];
         $stats = [
             'Всего заявок' => $orders->count(),
             'Оплачены' => $orders->where('payment_status', 'paid')->count(),
@@ -55,8 +68,9 @@ class OrderReportController extends Controller
             'Доставлены' => $orders->where('status', 'delivered')->count(),
             'Отменены' => $orders->where('status', 'cancelled')->count(),
             'Возвраты' => $orders->where('payment_status', 'refunded')->count(),
+            'Товаров, шт.' => $active->sum(fn ($o) => $o->items->sum('quantity')),
         ];
-        return response()->view('admin.orders.report', compact('orders', 'eligible', 'selected', 'shopping', 'shoppingOrders', 'stats', 'date', 'scope', 'status', 'statuses'))
+        return response()->view('admin.orders.report', compact('orders', 'eligible', 'selected', 'shopping', 'shoppingOrders', 'shoppingTotals', 'money', 'stats', 'date', 'scope', 'status', 'statuses'))
             ->header('Cache-Control', 'private, no-store');
     }
 }

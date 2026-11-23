@@ -3,6 +3,7 @@ namespace Tests\Feature;
 
 use App\Models\Order;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -59,5 +60,42 @@ class OrderReportTest extends TestCase
         $event->forceFill(['created_at'=>'2026-10-18 10:00:00'])->save();
         $this->get($url.'?date=2026-10-18&scope=activity')->assertOk()->assertViewHas('orders', fn ($orders)=>$orders->count()===1)->assertSee('operator: Начата сборка');
         $this->get($url.'?date=wrong')->assertSessionHasErrors('date');
+    }
+
+    private function reportOrder(string $number, string $status, string $payment, array $items, float $delivery = 3000): Order
+    {
+        $subtotal = array_sum(array_map(fn ($i) => $i[1] * $i[2], $items));
+        $order = Order::create([
+            'order_number' => $number, 'prisoner_name' => 'Получатель '.$number, 'institution_name' => 'ИК-1',
+            'contact_phone' => '+77001112233', 'subtotal' => $subtotal, 'delivery_fee' => $delivery, 'total' => $subtotal + $delivery,
+            'delivery_type' => 'standard', 'status' => $status, 'payment_status' => $payment,
+        ]);
+        foreach ($items as [$name, $price, $qty]) {
+            $order->items()->create(['product_id' => null, 'product_name' => $name, 'price' => $price, 'quantity' => $qty, 'total' => $price * $qty]);
+        }
+
+        return $order;
+    }
+
+    public function test_summary_shows_quantities_prices_sums_and_totals(): void
+    {
+        $this->travelTo(Carbon::parse('2026-11-24 12:00', 'Asia/Almaty'));
+        $a = $this->reportOrder('DOS-A', 'paid', 'paid', [['Чай', 1000, 2], ['Сахар', 500, 1]]);
+        $b = $this->reportOrder('DOS-B', 'pending', 'unpaid', [['Чай', 1200, 1]]);
+        $this->reportOrder('DOS-C', 'cancelled', 'unpaid', [['Кофе', 9000, 1]]);
+        $this->actingAs(User::factory()->create());
+
+        $page = $this->get('/admin/orders/report?date=2026-11-24&orders[]='.$a->id.'&orders[]='.$b->id)->assertOk();
+        // Итоги по деньгам: отменённая заявка не входит.
+        $page->assertSeeInOrder(['9 700 ₸', 'Сумма заявок (без отменённых)'], false)
+            ->assertSeeInOrder(['3 700 ₸', 'Из них товары'], false)
+            ->assertSeeInOrder(['6 000 ₸', 'Из них доставка'], false)
+            ->assertSeeInOrder(['5 500 ₸', 'Оплачено (подтверждено)'], false)
+            ->assertSeeInOrder(['4 200 ₸', 'Ждём оплату'], false)
+            ->assertSeeInOrder(['4', 'Товаров, шт.'], false);
+        // В строке заявки — состав и сумма.
+        $page->assertSee('2 поз. · 3 шт.')->assertSee('5 500 ₸');
+        // Список закупки: количество, цена (разная у одного товара — диапазон), сумма и итог.
+        $page->assertSee('1 000 ₸–1 200 ₸')->assertSee('3 200 ₸')->assertSee('Итого: 2 поз.')->assertSee('3 700 ₸');
     }
 }
