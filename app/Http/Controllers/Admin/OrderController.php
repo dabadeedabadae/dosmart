@@ -79,7 +79,6 @@ class OrderController extends Controller
             'delivery_type' => 'nullable|in:standard',
             'comment' => 'nullable|string|max:180',
             'payment_verified' => 'sometimes|accepted',
-            'parcel_code' => 'nullable|string|size:24',
             'payment_reference' => 'nullable|string|max:100',
             'refund_amount' => 'nullable|numeric|min:0.01|max:99999999.99|decimal:0,2',
             'refund_verified' => 'sometimes|accepted',
@@ -110,7 +109,7 @@ class OrderController extends Controller
             $comment = $data['comment'] ?? $this->statuses[$next];
             if ($order->institution_id && in_array($next, ['pending', 'paid'], true) && ! $order->prisoner_order_type) {
                 $institution = Institution::whereKey($order->institution_id)->lockForUpdate()->firstOrFail();
-                $accounts->reserveParcel($order, $institution, $data['parcel_code'] ?? null);
+                $accounts->reserveParcel($order, $institution);
             }
             if ($order->status === 'new' && $next === 'pending') {
                 if (empty($data['delivery_type'])) {

@@ -7,7 +7,7 @@
             @endforeach
         </select>
     </label></div>
-    <div class="form-group"><label>Лимит покупок с баланса
+    <div class="form-group"><label>Лимит покупок со счёта
         <select name="spending_mode" class="form-control" required data-spending-mode>
             @foreach(\App\Models\Prisoner::SPENDING_MODES as $value => $label)
                 <option value="{{ $value }}" @selected($mode === $value)>{{ $label }}</option>

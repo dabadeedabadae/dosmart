@@ -111,7 +111,7 @@ class PrisonerAccountsTest extends TestCase
         $order = Order::firstOrFail();
         $this->assertSame('paid', $order->payment_status);
         $this->assertNull($order->parcel_state);
-        $this->get('/admin/orders/'.$order->id)->assertOk()->assertSee('Покупка с баланса Dosmart');
+        $this->get('/admin/orders/'.$order->id)->assertOk()->assertSee('Покупка со счёта Dosmart');
 
         // Лимит считается только по товарам: доставка 3 000 ₸ в него не входит.
         $prisoner->forceFill(['spending_mode' => 'custom', 'monthly_limit_minor' => 200000, 'limit_started_on' => '2026-11-01'])->save();
@@ -125,7 +125,7 @@ class PrisonerAccountsTest extends TestCase
             ->assertJsonPath('limit_carried_minor', 99950)->assertJsonPath('monthly_limit_minor', 200000);
         $this->withToken($token)->postJson($path, $next)->assertCreated();
         $this->withToken($token)->postJson($path, $this->purchaseData($product->id))->assertUnprocessable()
-            ->assertJsonPath('errors.balance.0', 'На балансе недостаточно денег.');
+            ->assertJsonPath('errors.balance.0', 'На счёте недостаточно денег.');
 
         $refund = ['status' => 'refunded', 'refund_amount' => '4000.50', 'refund_verified' => '1', 'comment' => 'Тестовый возврат'];
         $this->patch('/admin/orders/'.$order->id.'/status', $refund)->assertSessionHasNoErrors();
@@ -157,16 +157,16 @@ class PrisonerAccountsTest extends TestCase
         ])->assertCreated()->json('code');
 
         $first = $draft();
-        $this->get($first)->assertOk()->assertSee('Код получателя');
-        $this->post($first, $checkout)->assertSessionHasErrors('recipient_birth_date');
+        $this->get($first)->assertOk()->assertDontSee('Код получателя')->assertDontSee('Дата рождения получателя');
+        // Человека нет в списке учреждения — заказ не оформить.
+        $this->post($first, ['prisoner_name' => 'Несуществующий Человек Тестович'] + $checkout)->assertSessionHasErrors('prisoner_name');
         $this->assertDatabaseCount('orders', 0);
-        $checkout['parcel_code'] = $prisoner->parcel_code;
         $this->post($first, $checkout)->assertRedirect($first.'/payment')->assertSessionHasNoErrors();
         $this->post($first, $checkout)->assertRedirect($first.'/payment');
         $order = Order::firstOrFail();
         $this->assertSame('reserved', $order->parcel_state);
         $second = $draft();
-        $this->post($second, $checkout)->assertSessionHasErrors('parcel_code');
+        $this->post($second, $checkout)->assertSessionHasErrors('prisoner_name');
 
         $this->patch('/admin/orders/'.$order->id.'/status', ['status' => 'cancelled'])->assertSessionHasNoErrors();
         $this->assertSame('released', $order->fresh()->parcel_state);
@@ -174,7 +174,7 @@ class PrisonerAccountsTest extends TestCase
         $order = Order::latest('id')->firstOrFail();
         $this->travelTo(Carbon::parse('2027-01-01 00:00', 'Asia/Almaty'));
         $third = $draft();
-        $this->post($third, $checkout)->assertSessionHasErrors('parcel_code');
+        $this->post($third, $checkout)->assertSessionHasErrors('prisoner_name');
 
         $status = '/admin/orders/'.$order->id.'/status';
         $this->patch($status, ['status' => 'paid', 'payment_verified' => 1, 'payment_reference' => 'KASPI-001'])->assertSessionHasNoErrors();
@@ -182,11 +182,11 @@ class PrisonerAccountsTest extends TestCase
         $this->patch($status, ['status' => 'delivered'])->assertSessionHasNoErrors();
         $this->assertSame('delivered', $order->fresh()->parcel_state);
         $this->assertEquals(2027, $order->fresh()->parcel_year);
-        $this->post($third, $checkout)->assertSessionHasErrors('parcel_code');
+        $this->post($third, $checkout)->assertSessionHasErrors('prisoner_name');
         $prisoner->update(['condition' => 'eased']);
         $this->post($third, $checkout)->assertRedirect($third.'/payment')->assertSessionHasNoErrors();
         $prisoner->update(['condition' => 'strict']);
-        $this->post($draft(), $checkout)->assertSessionHasErrors('parcel_code');
+        $this->post($draft(), $checkout)->assertSessionHasErrors('prisoner_name');
         $this->assertSame(1000000, $prisoner->fresh()->balance_minor);
     }
 
@@ -205,12 +205,10 @@ class PrisonerAccountsTest extends TestCase
 
         $this->actingAs(User::factory()->create());
         $order = Order::firstOrFail();
-        $this->get('/admin/orders/'.$order->id)->assertOk()->assertSee('Код получателя');
+        $this->get('/admin/orders/'.$order->id)->assertOk()->assertDontSee('Код получателя');
         $path = '/admin/orders/'.$order->id.'/status';
-        $this->patch($path, ['status' => 'pending', 'delivery_type' => 'standard'])->assertSessionHasErrors('recipient_birth_date');
-        $this->assertSame('new', $order->fresh()->status);
-        $this->patch($path, ['status' => 'pending', 'delivery_type' => 'standard', 'parcel_code' => $prisoner->parcel_code])
-            ->assertSessionHasNoErrors();
+        // Получатель находится по ФИО в списке учреждения — код не нужен.
+        $this->patch($path, ['status' => 'pending', 'delivery_type' => 'standard'])->assertSessionHasNoErrors();
         $this->assertSame('reserved', $order->fresh()->parcel_state);
         $this->patch($path, ['status' => 'paid', 'payment_verified' => 1, 'payment_reference' => 'KASPI-001'])->assertSessionHasNoErrors();
         $refund = ['status' => 'refunded', 'refund_verified' => '1', 'comment' => 'До вручения'];
@@ -255,22 +253,24 @@ class PrisonerAccountsTest extends TestCase
         $checkout = [
             'prisoner_name' => $prisoner->full_name, 'institution_id' => $institution->id,
             'relative_name' => 'Отправитель Тестовый', 'contact_phone' => '+7 705 621 8748', 'delivery_type' => 'standard', 'consent' => 1,
-            'expected_total' => '4250.50', 'parcel_code' => $prisoner->parcel_code,
+            'expected_total' => '4250.50',
         ];
         $draft = fn () => '/o/'.$this->postJson('/api/v1/guest/drafts', [
             'request_id' => (string) Str::uuid(), 'items' => [['product_id' => $product->id, 'quantity' => 1]],
         ])->assertCreated()->json('code');
 
         $first = $draft();
-        $lookup = ['institution_id' => $institution->id, 'parcel_code' => $prisoner->parcel_code];
-        $this->postJson($first.'/parcel-limit', ['parcel_code' => str_repeat('0', 24)] + $lookup)->assertNotFound();
-        $this->postJson($first.'/parcel-limit', $lookup)->assertOk()->assertJsonPath('budget.remaining_minor', 200000)
-            ->assertJsonMissingPath('full_name')->assertJsonMissingPath('balance_minor')->assertJsonMissingPath('iin');
+        $lookup = ['institution_id' => $institution->id, 'prisoner_name' => mb_strtoupper($prisoner->full_name)];
+        $this->postJson($first.'/recipient-limits', ['prisoner_name' => 'Нет Такого Человека'] + $lookup)->assertOk()
+            ->assertExactJson(['limited' => true, 'found' => false, 'namesakes' => false]);
+        // Родственник видит только остаток лимита.
+        $this->postJson($first.'/recipient-limits', $lookup)->assertOk()
+            ->assertExactJson(['limited' => true, 'found' => true, 'parcel_budget_minor' => 200000, 'parcels_available' => null]);
         $this->post($first, $checkout)->assertRedirect($first.'/payment')->assertSessionHasNoErrors();
         $order = Order::firstOrFail();
         $this->get('/admin/prisoners/'.$prisoner->id)->assertOk()->assertSee('2 МРП')->assertSee('749,50');
         $second = $draft();
-        $this->post($second, $checkout)->assertSessionHasErrors('parcel_code');
+        $this->post($second, $checkout)->assertSessionHasErrors('prisoner_name');
 
         $this->post($first.'/changes', [
             'revision' => app(OrderChanges::class)->revision($order),

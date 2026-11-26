@@ -7,7 +7,7 @@
         <div>
             <span class="limits-kicker">Dosmart · Админка</span>
             <h1 class="page-title">Учёт лимитов</h1>
-            <p>Карточки по ФИО и отряду, пополнение баланса, лимиты покупок и нормы передач.</p>
+            <p>Карточки по ФИО и отряду, пополнение счёта, лимиты покупок и нормы передач.</p>
         </div>
         <div class="limits-actions">
             <a class="btn @if($pendingRequests) btn-primary @endif" href="{{ route('admin.prisoners.requests') }}">Заявки родственников @if($pendingRequests)<span class="badge badge-warning">{{ $pendingRequests }}</span>@endif</a>

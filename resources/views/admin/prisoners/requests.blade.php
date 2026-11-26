@@ -8,7 +8,7 @@
 <header class="limits-hero">
     <div><span class="limits-kicker">Учёт лимитов</span>
     <h1 class="page-title">Заявки родственников</h1>
-    <p>Родственник по коду из кабинета просит пополнить баланс и платит через Kaspi с номером заявки в комментарии. Сверьте поступление в Kaspi Pay и зачислите.</p></div>
+    <p>Родственник по коду из кабинета просит пополнить счёт и платит через Kaspi с номером заявки в комментарии. Сверьте поступление в Kaspi Pay и зачислите.</p></div>
 </header>
 <nav class="limits-tabs" aria-label="Статус">
     @foreach(\App\Models\DepositRequest::STATUSES as $key => $label)
@@ -38,7 +38,7 @@
                             <div class="form-group"><label>№ платежа Kaspi <input class="form-control" name="payment_reference" maxlength="100" required></label></div>
                         </div>
                         <label class="limits-check"><input type="checkbox" name="payment_verified" value="1" required> Поступление сверено в Kaspi Pay</label>
-                        <button class="btn btn-primary">Зачислить на баланс</button>
+                        <button class="btn btn-primary">Зачислить на счёт</button>
                     </form>
                     <details class="limits-more"><summary>Отклонить</summary>
                         <form method="post" action="{{ route('admin.prisoners.requests.reject', $deposit) }}" class="limits-form">

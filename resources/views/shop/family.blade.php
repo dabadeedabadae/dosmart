@@ -1,5 +1,5 @@
 @extends('shop.layout')
-@section('title', 'Баланс родственника — Dosmart')
+@section('title', 'Счёт родственника — Dosmart')
 @section('body-class', 'checkout-page')
 @php($tenge = fn (?int $minor) => number_format(($minor ?? 0) / 100, 0, ',', ' ').' ₸')
 @section('content')
@@ -18,13 +18,13 @@
         <div class="family-pay" role="status">
             <strong>Заявка {{ $created->number() }} на {{ $tenge($created->amount_minor) }} принята.</strong><br>
             @if($kaspiUrl)Оплатите по ссылке Kaspi: <a href="{{ $kaspiUrl }}" target="_blank" rel="noopener">{{ $kaspiUrl }}</a>. @endif
-            В комментарии к переводу укажите номер заявки <strong>{{ $created->number() }}</strong>. Сотрудник сверит поступление и зачислит деньги на баланс — обычно в часы работы магазина ({{ config('pilot.service_hours') }}). Фискальный чек придёт в приложение Kaspi.
+            В комментарии к переводу укажите номер заявки <strong>{{ $created->number() }}</strong>. Сотрудник сверит поступление и зачислит деньги на счёт — обычно в часы работы магазина ({{ config('pilot.service_hours') }}). Фискальный чек придёт в приложение Kaspi.
         </div>
         @endif
     @endif
 
-    <section class="family-metrics" aria-label="Баланс и лимит">
-        <div class="family-metric main"><span>Баланс Dosmart</span><strong>{{ $tenge($profile['balance_minor']) }}</strong><small>На эти деньги можно покупать товары на планшете</small></div>
+    <section class="family-metrics" aria-label="Счёт и лимит">
+        <div class="family-metric main"><span>Счёт Dosmart</span><strong>{{ $tenge($profile['balance_minor']) }}</strong><small>На эти деньги можно покупать товары на планшете</small></div>
         <div class="family-metric">
             <span>Лимит покупок в этом месяце</span>
             @if($profile['monthly_limit_minor'] === null)
@@ -37,7 +37,7 @@
     </section>
 
     <section class="form-card family-card">
-        <h2>Попросить пополнить баланс</h2>
+        <h2>Попросить пополнить счёт</h2>
         <p class="form-hint">Заполните заявку, затем оплатите через Kaspi. Деньги зачисляются после проверки сотрудником. Учреждение может ограничивать число и сумму переводов в месяц — если перевод нельзя зачислить, магазин свяжется с вами и вернёт деньги.</p>
         @if($errors->any())<div class="form-errors" role="alert">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
         <form method="post" action="{{ route('family.deposit') }}">

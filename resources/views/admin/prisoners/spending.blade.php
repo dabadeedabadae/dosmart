@@ -1,5 +1,5 @@
 <details class="card limits-panel" open>
-    <summary>Месячные нормы покупок с баланса (МРП)</summary>
+    <summary>Месячные нормы покупок со счёта (МРП)</summary>
     @php($mrpNow = now('Asia/Almaty'))
     @if(! isset($institution->parcel_mrp_rates[$mrpNow->year]) && ! config('pilot.mrp.'.$mrpNow->year))
         <p class="limits-warn">МРП на {{ $mrpNow->year }} год не введён — лимиты считаются по МРП прошлого года. Введите новый МРП ниже.</p>

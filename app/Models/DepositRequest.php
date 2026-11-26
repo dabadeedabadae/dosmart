@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-/** Просьба родственника пополнить баланс осуждённого; деньги зачисляет сотрудник после сверки. */
+/** Просьба родственника пополнить счёт осуждённого; деньги зачисляет сотрудник после сверки. */
 class DepositRequest extends Model
 {
     public const STATUSES = ['new' => 'Ждёт оплаты', 'credited' => 'Зачислено', 'rejected' => 'Отклонено'];

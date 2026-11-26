@@ -55,11 +55,13 @@ class PrisonerSelfRegistrationTest extends TestCase
     {
         $this->api('POST', '/api/v1/prisoner/register', $this->form(['full_name' => 'Тестов']))->assertUnprocessable()->assertJsonValidationErrors('full_name');
         $this->api('POST', '/api/v1/prisoner/register', $this->form(['squad' => '']))->assertUnprocessable()->assertJsonValidationErrors('squad');
-        $this->api('POST', '/api/v1/prisoner/register', $this->form(['condition' => 'privileged', 'pin' => '150390', 'pin_confirmation' => '150390']))
+        $this->api('POST', '/api/v1/prisoner/register', $this->form(['condition' => 'privileged', 'pin' => '12345', 'pin_confirmation' => '12345']))
             ->assertUnprocessable()->assertJsonValidationErrors('pin');
 
         $token = $this->api('POST', '/api/v1/prisoner/register', $this->form(['condition' => 'privileged']))->assertOk()
             ->assertJsonPath('profile.reviewed', false)->assertJsonPath('profile.squad', '5')
+            // Приложение ждёт число: новая карточка должна отдавать 0, а не null.
+            ->assertJsonPath('profile.balance_minor', 0)
             ->assertJsonPath('profile.condition', 'Льготные')->json('token');
         $prisoner = Prisoner::firstOrFail();
         $this->assertSame([$this->institution->id, 'norm', 'privileged', '1990-03-15'],
@@ -69,7 +71,7 @@ class PrisonerSelfRegistrationTest extends TestCase
         // Повторно с теми же ФИО и датой — уже зарегистрирован.
         $this->api('POST', '/api/v1/prisoner/register', $this->form(['pin' => '583920', 'pin_confirmation' => '583920']))->assertConflict();
 
-        // До проверки покупки с баланса закрыты.
+        // До проверки покупки со счёта закрыты.
         $prisoner->forceFill(['balance_minor' => 1_000_000])->save();
         $product = Product::create(['name' => 'Чай', 'price' => 1000]);
         $purchase = ['request_id' => (string) Str::uuid(), 'expected_total_minor' => 400000, 'squad_number' => '5', 'consent' => true,
@@ -83,7 +85,7 @@ class PrisonerSelfRegistrationTest extends TestCase
         $this->get('/admin/prisoners/'.$prisoner->id)->assertSee('Зарегистрировался сам на планшете');
         $this->post('/admin/prisoners/'.$prisoner->id.'/review')->assertRedirect();
         $this->assertFalse($prisoner->fresh()->needsReview());
-        // Норма учреждения ещё не задана — покупка с баланса не пройдёт, пока сотрудник не задаст норму или режим.
+        // Норма учреждения ещё не задана — покупка со счёта не пройдёт, пока сотрудник не задаст норму или режим.
         $this->api('POST', '/api/v1/prisoner/purchases', $purchase, $token)->assertUnprocessable()->assertJsonValidationErrors('balance');
         $prisoner->fresh()->forceFill(['spending_mode' => 'unlimited'])->save(); // работает — «Без лимита» (ст. 105)
         $this->api('POST', '/api/v1/prisoner/purchases', $purchase, $token)->assertCreated();
@@ -110,8 +112,9 @@ class PrisonerSelfRegistrationTest extends TestCase
 
         $this->api('POST', '/api/v1/prisoner/login', ['birth_date' => '1990-03-16', 'secret' => '482915'] + $login)
             ->assertUnauthorized()->assertJsonPath('message', 'Неверные ФИО, дата рождения или пароль.');
+        // Неверный пароль — тот же ответ, что и неверная дата: дату так не подобрать.
         $this->api('POST', '/api/v1/prisoner/login', $login + ['secret' => '000001'])->assertUnauthorized()
-            ->assertJsonPath('message', 'Неверный пароль. Осталось попыток: 4.');
+            ->assertJsonPath('message', 'Неверные ФИО, дата рождения или пароль.');
         $this->api('POST', '/api/v1/prisoner/login', $login + ['secret' => '482915'])->assertOk();
 
         // Отряд меняется в настройках, на вход не влияет.
@@ -131,6 +134,49 @@ class PrisonerSelfRegistrationTest extends TestCase
         $this->assertNotNull(Prisoner::first()->recovered_at);
         $this->travel(25)->hours();
         $recover('284061')->assertOk();
+    }
+
+    public function test_login_by_name_and_pin_asks_birth_date_only_for_namesakes(): void
+    {
+        $this->api('POST', '/api/v1/prisoner/register', $this->form())->assertOk();
+        $this->api('POST', '/api/v1/prisoner/login', ['full_name' => ' тестов  арман  серикович ', 'secret' => '482915'])->assertOk();
+        $this->api('POST', '/api/v1/prisoner/login', ['full_name' => 'Тестов Арман Серикович', 'secret' => '000001'])
+            ->assertUnauthorized()->assertJsonPath('message', 'Неверные ФИО или пароль.');
+        $this->api('POST', '/api/v1/prisoner/login', ['full_name' => 'Нетакого Человека Нет', 'secret' => '482915'])
+            ->assertUnauthorized()->assertJsonPath('message', 'Неверные ФИО или пароль.');
+
+        // Полный тёзка сам не зарегистрируется (ответ не зависит от даты), его оформляет сотрудник.
+        foreach (['1990-03-15', '1985-01-02'] as $date) {
+            $this->api('POST', '/api/v1/prisoner/register', $this->form(['birth_date' => $date]))
+                ->assertStatus(409)->assertJsonPath('message', 'Человек с такими ФИО уже зарегистрирован. Войдите или обратитесь к сотруднику магазина.');
+        }
+        $twin = Prisoner::create(['full_name' => 'Тестов Арман Серикович', 'institution_id' => $this->institution->id, 'condition' => 'ordinary', 'parcel_code' => str_repeat('A', 24)]);
+        $twin->setPin('739104');
+        $twin->forceFill(['birth_date' => '1985-01-02', 'registered_at' => now()])->save();
+        // Без даты войти нельзя, с датой можно.
+        $this->api('POST', '/api/v1/prisoner/login', ['full_name' => 'Тестов Арман Серикович', 'secret' => '482915'])
+            ->assertStatus(409)->assertJsonPath('message', 'В учреждении есть человек с такими же ФИО. Укажите дату рождения.');
+        $this->api('POST', '/api/v1/prisoner/login', ['full_name' => 'Тестов Арман Серикович', 'birth_date' => '1985-01-02', 'secret' => '739104'])->assertOk();
+    }
+
+    public function test_recovered_password_closes_purchases_until_staff_check_and_ends_old_sessions(): void
+    {
+        $old = $this->api('POST', '/api/v1/prisoner/register', $this->form())->assertOk()->json('token');
+        $prisoner = Prisoner::firstOrFail();
+        $prisoner->forceFill(['reviewed_at' => now()])->save();
+        $this->api('GET', '/api/v1/prisoner/profile', [], $old)->assertOk()->assertJsonPath('reviewed', true);
+
+        // Кто-то знает ФИО и дату рождения и ставит свой пароль.
+        $new = $this->api('POST', '/api/v1/prisoner/recover', ['full_name' => 'Тестов Арман Серикович', 'birth_date' => '1990-03-15', 'pin' => '111111', 'pin_confirmation' => '111111'])
+            ->assertOk()->json('token');
+        $this->assertTrue($prisoner->fresh()->needsReview());
+        $this->api('GET', '/api/v1/prisoner/profile', [], $old)->assertUnauthorized();
+        $this->api('GET', '/api/v1/prisoner/profile', [], $new)->assertOk()->assertJsonPath('reviewed', false);
+        $product = Product::create(['name' => 'Чай', 'price' => 1000]);
+        $this->api('POST', '/api/v1/prisoner/purchases', [
+            'request_id' => (string) Str::uuid(), 'expected_total_minor' => 100000, 'squad_number' => '5', 'consent' => true,
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ], $new)->assertUnprocessable()->assertJsonValidationErrors('balance');
     }
 
     public function test_recovery_by_security_question_needs_the_answer(): void
@@ -158,27 +204,23 @@ class PrisonerSelfRegistrationTest extends TestCase
         $checkout = ['prisoner_name' => 'Тестов Арман Серикович', 'relative_name' => 'Тестова Мария', 'institution_id' => $this->institution->id,
             'contact_phone' => '+77001112233', 'delivery_type' => 'standard', 'consent' => 1, 'expected_total' => 4000, 'squad_number' => '5'];
 
-        // Получатель без кабинета — заказ оформляется как раньше, без проверки лимита.
+        // Человека нет в списке учреждения — заказ не оформить.
         $free = $draft();
-        $this->post('/o/'.$free->code, ['prisoner_name' => 'Другой Человек Без Кабинета'] + $checkout)->assertRedirect('/o/'.$free->code.'/payment');
-        $this->assertNull(Order::firstOrFail()->prisoner_id);
-        Order::query()->delete();
+        $this->post('/o/'.$free->code, ['prisoner_name' => 'Другой Человек Без Кабинета'] + $checkout)->assertSessionHasErrors('prisoner_name');
+        $this->assertSame(0, Order::count());
 
-        // У получателя есть кабинет: без даты рождения или с неверной датой — не оформится.
+        // Есть в списке: достаточно ФИО, без даты рождения и кода.
         $first = $draft();
-        $this->post('/o/'.$first->code, $checkout)->assertSessionHasErrors('recipient_birth_date');
-        $this->post('/o/'.$first->code, $checkout + ['recipient_birth_date' => '1990-03-16'])->assertSessionHasErrors('recipient_birth_date');
-        $this->post('/o/'.$first->code, $checkout + ['parcel_code' => str_repeat('A', 24)])->assertSessionHasErrors('parcel_code');
-        $this->post('/o/'.$first->code, $checkout + ['recipient_birth_date' => '1990-03-15'])->assertRedirect('/o/'.$first->code.'/payment');
+        $this->post('/o/'.$first->code, ['prisoner_name' => 'тестов  арман серикович'] + $checkout)->assertRedirect('/o/'.$first->code.'/payment');
         $order = Order::firstOrFail();
         $this->assertSame([$prisoner->id, 'parcel', 'reserved'], [$order->prisoner_id, $order->prisoner_order_type, $order->parcel_state]);
 
         // Передача на год использована — следующий заказ блокируется.
         $second = $draft();
         $this->postJson('/o/'.$second->code.'/recipient-limits', ['institution_id' => $this->institution->id,
-            'prisoner_name' => 'Тестов Арман Серикович', 'birth_date' => '1990-03-15'])->assertOk()->assertJsonPath('parcels_available', 0);
-        $this->post('/o/'.$second->code, $checkout + ['recipient_birth_date' => '1990-03-15'])
-            ->assertSessionHasErrors(['parcel_code' => 'У получателя закончились передачи на этот год по закону (ст. 136, 138 УИК РК). Заказ оформить нельзя.']);
+            'prisoner_name' => 'Тестов Арман Серикович'])->assertOk()->assertJsonPath('parcels_available', 0)->assertJsonMissingPath('birth_date');
+        $this->post('/o/'.$second->code, $checkout)
+            ->assertSessionHasErrors(['prisoner_name' => 'У получателя закончились передачи на этот год. Заказ оформить нельзя.']);
         $this->assertSame(1, Order::count());
     }
 
@@ -198,7 +240,7 @@ class PrisonerSelfRegistrationTest extends TestCase
         $this->withHeaders(['Authorization' => 'Bearer '.$token])->postJson('/api/v1/guest/orders', $order())->assertCreated();
         $this->assertSame('reserved', Order::latest('id')->first()->parcel_state);
         $this->withHeaders(['Authorization' => 'Bearer '.$token])->postJson('/api/v1/guest/orders', $order())
-            ->assertUnprocessable()->assertJsonValidationErrors('parcel_code');
+            ->assertUnprocessable()->assertJsonValidationErrors('prisoner_name');
         // Чужой или истёкший токен (например, от старого приложения) — заказ принимается как раньше.
         $this->withHeaders(['Authorization' => 'Bearer broken'])->postJson('/api/v1/guest/orders', $order())->assertCreated();
         $this->assertNull(Order::latest('id')->first()->prisoner_id);

@@ -19,10 +19,9 @@ Route::prefix('shop')->name('shop.')->group(function () {
     Route::get('/', [ShopController::class, 'index'])->name('index');
     Route::get('/category/{category}', [ShopController::class, 'category'])->name('category');
     Route::get('/cart', [ShopController::class, 'cart'])->name('cart');
-    Route::get('/login', [App\Http\Controllers\Shop\AuthController::class, 'form'])->name('login');
-    Route::get('/register', [App\Http\Controllers\Shop\AuthController::class, 'form'])->name('register');
-    Route::post('/login', [App\Http\Controllers\Shop\AuthController::class, 'login'])->middleware('throttle:5,1');
-    Route::post('/register', [App\Http\Controllers\Shop\AuthController::class, 'register'])->middleware('throttle:5,1');
+    // Вход и регистрация покупателей отключены: заказ оформляется без аккаунта. Вход только для сотрудников — /admin/login.
+    Route::redirect('/login', '/shop')->name('login');
+    Route::redirect('/register', '/shop')->name('register');
     Route::middleware('auth:customer')->group(function () {
         Route::post('/logout', [App\Http\Controllers\Shop\AuthController::class, 'logout'])->name('logout');
         Route::get('/orders', [App\Http\Controllers\Shop\AuthController::class, 'orders'])->name('orders');
@@ -38,8 +37,7 @@ Route::post('/o', [PilotController::class, 'lookup'])->middleware('throttle:15,1
 Route::get('/o/{code}', [PilotController::class, 'show'])->middleware('throttle:30,1')->name('pilot.show');
 Route::post('/o/{code}', [PilotController::class, 'checkout'])->middleware('throttle:10,1')->name('pilot.checkout');
 // Родственник видит только лимиты получателя (не баланс): ФИО + учреждение + дата рождения.
-Route::post('/o/{code}/recipient-limits', [PilotController::class, 'recipientLimits'])->middleware('throttle:30,60')->name('pilot.recipient-limits');
-Route::post('/o/{code}/parcel-limit', [PilotController::class, 'parcelLimit'])->middleware('throttle:12,1')->name('pilot.parcel-limit');
+Route::post('/o/{code}/recipient-limits', [PilotController::class, 'recipientLimits'])->middleware('throttle:30,1')->name('pilot.recipient-limits');
 Route::get('/o/{code}/payment', [PilotController::class, 'payment'])->middleware('throttle:30,1')->name('pilot.payment');
 Route::post('/o/{code}/payment-reported', [PilotController::class, 'reportPayment'])->middleware('throttle:10,1')->name('pilot.report-payment');
 Route::post('/o/{code}/changes', [PilotController::class, 'requestChanges'])->middleware('throttle:10,1')->name('pilot.changes');

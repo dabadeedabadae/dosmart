@@ -229,9 +229,9 @@ void main() {
       await tester.ensureVisible(open);
       await tester.tap(open);
       await tester.pumpAndSettle();
-      expect(find.text('Вход в личный кабинет'), findsOneWidget);
+      expect(find.text('Вход'), findsOneWidget);
       expect(find.text('Найти себя'), findsNothing);
-      final toRegister = find.text('Я здесь впервые — зарегистрироваться');
+      final toRegister = find.widgetWithText(OutlinedButton, 'Регистрация');
       await tester.ensureVisible(toRegister);
       await tester.tap(toRegister);
       await tester.pumpAndSettle();
@@ -247,39 +247,27 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(fields.at(1), '7');
       final submit = find.text('Зарегистрироваться');
-      // Неверная дата не уходит на сервер.
-      await tester.enterText(fields.at(2), '31');
-      await tester.enterText(fields.at(3), '02');
-      await tester.enterText(fields.at(4), '1990');
+      // Неверная дата не уходит на сервер; точки ставятся сами.
+      await tester.enterText(fields.at(2), '31021990');
+      expect(find.text('31.02.1990'), findsOneWidget);
       await tester.ensureVisible(submit);
       await tester.tap(submit);
       await tester.pumpAndSettle();
-      expect(find.text('Проверьте дату рождения.'), findsOneWidget);
+      expect(find.text('Проверьте дату рождения: ДД.ММ.ГГГГ.'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
-      await tester.enterText(fields.at(2), '15');
-      await tester.enterText(fields.at(3), '3');
-      await tester.enterText(fields.at(5), '482915');
-      await tester.enterText(fields.at(6), '482916');
-      await tester.ensureVisible(submit);
-      await tester.tap(submit);
-      await tester.pumpAndSettle();
-      expect(find.text('Пароли не совпадают.'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
-      await tester.enterText(fields.at(6), '482915');
+      await tester.enterText(fields.at(2), '15031990');
+      // Пароль вводится один раз.
+      await tester.enterText(fields.at(3), '482915');
       await tester.ensureVisible(submit);
       await tester.tap(submit);
       await tester.pumpAndSettle();
       expect(registered, isNull);
-      expect(
-        find.text('Отметьте согласие, чтобы зарегистрироваться.'),
-        findsOneWidget,
-      );
+      expect(find.text('Отметьте согласие.'), findsOneWidget);
       // Ждём, пока подсказка внизу экрана исчезнет.
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
-      final consent = find.byType(CheckboxListTile);
+      final consent = find.byType(Checkbox);
       await tester.ensureVisible(consent);
       await tester.tap(consent);
       await tester.pumpAndSettle();
@@ -295,7 +283,7 @@ void main() {
         'pin': '482915',
         'pin_confirmation': '482915',
       });
-      expect(find.text('Купить с баланса'), findsOneWidget);
+      expect(find.text('Купить со счёта'), findsOneWidget);
       expect(find.text('Заказать через родственника'), findsOneWidget);
       expect(find.text('Настройки'), findsOneWidget);
       expect(find.text('Выйти'), findsOneWidget);
@@ -308,11 +296,9 @@ void main() {
       );
       await tester.tap(find.text('Настройки'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Получить код'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Получить код'));
-      await tester.pumpAndSettle();
-      expect(find.text('482 915'), findsOneWidget);
+      // Отдельного кода для родственников больше нет — только заказ через корзину.
+      expect(find.text('Получить код'), findsNothing);
+      expect(find.text('Код для родственников'), findsNothing);
       await tester.ensureVisible(find.text('Назад в кабинет'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Назад в кабинет'));
@@ -367,22 +353,18 @@ void main() {
       await tester.ensureVisible(find.text('Войти в личный кабинет'));
       await tester.tap(find.text('Войти в личный кабинет'));
       await tester.pumpAndSettle();
-      expect(find.text('Пароль — 6 цифр'), findsOneWidget);
+      expect(find.text('Пароль'), findsOneWidget);
       final forgot = find.widgetWithText(TextButton, 'Забыли пароль?');
       await tester.ensureVisible(forgot);
       await tester.pumpAndSettle();
       await tester.tap(forgot);
       await tester.pumpAndSettle();
-      expect(find.text('Восстановление пароля'), findsOneWidget);
-      expect(find.text('Ваша дата рождения'), findsOneWidget);
+      expect(find.text('Новый пароль'), findsOneWidget);
       final fields = find.byType(TextField);
       await tester.enterText(fields.at(0), 'Иванов Иван');
-      await tester.enterText(fields.at(1), '15');
-      await tester.enterText(fields.at(2), '03');
-      await tester.enterText(fields.at(3), '1990');
-      await tester.enterText(fields.at(5), '735102');
-      await tester.enterText(fields.at(6), '735102');
-      final save = find.text('Сохранить новый пароль и войти');
+      await tester.enterText(fields.at(1), '15031990');
+      await tester.enterText(fields.at(2), '735102');
+      final save = find.text('Сохранить и войти');
       await tester.ensureVisible(save);
       await tester.pumpAndSettle();
       await tester.tap(save);
@@ -393,11 +375,83 @@ void main() {
         'pin': '735102',
         'pin_confirmation': '735102',
       });
-      expect(find.text('Купить с баланса'), findsOneWidget);
+      expect(find.text('Купить со счёта'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       store.dispose();
     },
   );
+  testWidgets('login asks only name and password, birth date only on request', (
+    tester,
+  ) async {
+    final logins = <Map>[];
+    final profile = {
+      'full_name': 'Иванов Иван',
+      'institution': 'ИК-1',
+      'condition': 'Обычные',
+      'balance_minor': 0,
+      'delivery_minor': 300000,
+      'auth_method': 'pin',
+    };
+    final store = Store(
+      ShopApi(
+        client: MockClient((r) async {
+          final json = {'content-type': 'application/json; charset=utf-8'};
+          Object data = {};
+          var status = 200;
+          switch (r.url.path) {
+            case '/api/v1/tablet':
+              data = {
+                'institution': {'id': 1, 'name': 'ИК-1'},
+              };
+            case '/api/v1/prisoner/squads':
+              data = {'squads': []};
+            case '/api/v1/prisoner/login':
+              final body = jsonDecode(r.body) as Map;
+              logins.add(body);
+              if (!body.containsKey('birth_date')) {
+                status = 409;
+                data = {'message': 'Есть тёзка.'};
+              } else {
+                data = {'token': 't1', 'profile': profile};
+              }
+            case '/api/v1/prisoner/history':
+              data = {'profile': profile, 'operations': []};
+          }
+          return http.Response(jsonEncode(data), status, headers: json);
+        }),
+      ),
+      storage: MemoryTabletStorage(const TabletInfo('tab', 1, 'ИК-1')),
+    );
+    await tester.pumpWidget(DoSmartApp(store: store));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Войти в личный кабинет'));
+    await tester.tap(find.text('Войти в личный кабинет'));
+    await tester.pumpAndSettle();
+    expect(find.text('Дата рождения'), findsNothing);
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Иванов Иван');
+    await tester.enterText(fields.at(1), '111111');
+    final enter = find.widgetWithText(FilledButton, 'Войти');
+    await tester.ensureVisible(enter);
+    await tester.tap(enter);
+    await tester.pumpAndSettle();
+    expect(logins.single, {'full_name': 'Иванов Иван', 'secret': '111111'});
+    expect(find.text('Укажите ещё дату рождения.'), findsOneWidget);
+    expect(find.text('Дата рождения'), findsOneWidget);
+    await tester.enterText(fields.at(1), '15031990');
+    await tester.enterText(fields.at(2), '111111');
+    await tester.ensureVisible(enter);
+    await tester.tap(enter);
+    await tester.pumpAndSettle();
+    expect(logins.last, {
+      'full_name': 'Иванов Иван',
+      'birth_date': '1990-03-15',
+      'secret': '111111',
+    });
+    expect(find.text('Купить со счёта'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    store.dispose();
+  });
   testWidgets('instructions lead to catalog and an obvious basket button', (
     tester,
   ) async {

@@ -11,8 +11,12 @@ class ShopApi {
   final Uri base;
   // Токен привязки планшета к учреждению; отправляется только в кабинет.
   String? tabletToken;
-  // Только для тестового стенда без шлюза MDM. В боевой сборке пусто — заголовок ставит шлюз.
-  static const testGateway = String.fromEnvironment('DOSMART_TEST_GATEWAY');
+  // Ключ кабинета (--dart-define=DOSMART_GATEWAY). Без ключа сборка работает как раньше:
+  // каталог и заявки идут, кабинет закрыт. DOSMART_TEST_GATEWAY — старое имя для тестового стенда.
+  static const testGateway = String.fromEnvironment(
+    'DOSMART_GATEWAY',
+    defaultValue: String.fromEnvironment('DOSMART_TEST_GATEWAY'),
+  );
   ShopApi({
     http.Client? client,
     String url = const String.fromEnvironment(
@@ -190,7 +194,7 @@ class ShopApi {
   ) async => _session(
     await _post('/api/v1/prisoner/login', {
       'full_name': name,
-      'birth_date': birthDate,
+      if (birthDate.isNotEmpty) 'birth_date': birthDate,
       'secret': secret,
     }),
   );

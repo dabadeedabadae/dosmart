@@ -86,7 +86,7 @@ class PrisonerCabinetTest extends TestCase
         $this->api('GET', '/api/v1/prisoner/squads')->assertOk()->assertExactJson(['squads' => ['7', '10']]);
         // Только своё учреждение и выбранный отряд; слова ФИО — в любом порядке, ё = е.
         $this->api('POST', '/api/v1/prisoner/find', ['full_name' => 'иван иванов', 'squad' => '7'])->assertOk()
-            ->assertJsonCount(1, 'matches')->assertJsonPath('matches.0.id', $prisoner->id)->assertJsonPath('matches.0.registered', false);
+            ->assertJsonCount(1, 'matches')->assertJsonPath('matches.0.id', $prisoner->id)->assertJsonMissingPath('matches.0.registered');
         $this->api('POST', '/api/v1/prisoner/find', ['full_name' => 'сидоров петр', 'squad' => '7'])->assertOk()->assertJsonCount(0, 'matches');
         $this->api('POST', '/api/v1/prisoner/find', ['full_name' => 'сидоров петр', 'squad' => '10'])->assertOk()->assertJsonCount(1, 'matches');
 
@@ -116,10 +116,6 @@ class PrisonerCabinetTest extends TestCase
             ->assertUnprocessable()->assertJsonPath('errors.pin.0', 'Пароль — ровно 6 цифр.');
         $this->api('POST', '/api/v1/prisoner/register', $identity + ['birth_date' => '1990-03-15', 'pin' => self::PIN, 'pin_confirmation' => '482916'])
             ->assertUnprocessable()->assertJsonValidationErrors('pin');
-        foreach (['111111', '123456', '987654', '150390', '900315', '199003'] as $weak) {
-            $this->api('POST', '/api/v1/prisoner/register', $identity + ['birth_date' => '1990-03-15'] + $pin($weak))
-                ->assertUnprocessable()->assertJsonPath('errors.pin.0', 'Слишком простой пароль. Не используйте одинаковые цифры, цифры подряд и дату рождения.');
-        }
         // Нельзя зарегистрировать карточку, подставив номер, если ФИО и условия не совпали.
         $this->api('POST', '/api/v1/prisoner/register', ['condition' => 'strict'] + $identity + ['birth_date' => '1990-03-15'] + $pin(self::PIN))
             ->assertNotFound();
@@ -130,8 +126,9 @@ class PrisonerCabinetTest extends TestCase
             ->assertJsonPath('auth_method', 'pin')->assertJsonPath('recovery_method', 'birth_date')
             ->assertJsonMissingPath('iin')->assertJsonMissingPath('birth_date');
         $this->api('POST', '/api/v1/prisoner/register', $identity + ['birth_date' => '1990-03-15'] + $pin('583920'))->assertConflict();
-        $this->api('POST', '/api/v1/prisoner/find', $identity)->assertJsonPath('matches.0.registered', true)
-            ->assertJsonPath('matches.0.method', 'pin')->assertJsonPath('matches.0.recovery', 'birth_date');
+        // Поиск не раскрывает, есть ли у человека кабинет и как он восстанавливает пароль.
+        $this->api('POST', '/api/v1/prisoner/find', $identity)->assertJsonMissingPath('matches.0.registered')
+            ->assertJsonMissingPath('matches.0.method')->assertJsonMissingPath('matches.0.recovery');
 
         for ($i = 0; $i < 4; $i++) {
             $this->api('POST', '/api/v1/prisoner/login', $identity + ['secret' => '000000'])->assertUnauthorized();
@@ -162,7 +159,7 @@ class PrisonerCabinetTest extends TestCase
 
         $this->api('POST', '/api/v1/prisoner/recover', $identity + ['proof' => '1990-03-16'] + $newPin)
             ->assertUnauthorized()->assertJsonPath('message', 'Дата рождения не совпадает. Осталось попыток: 2.');
-        $this->api('POST', '/api/v1/prisoner/recover', $identity + ['proof' => '1990-03-15', 'pin' => '150390', 'pin_confirmation' => '150390'])
+        $this->api('POST', '/api/v1/prisoner/recover', $identity + ['proof' => '1990-03-15', 'pin' => '12345', 'pin_confirmation' => '12345'])
             ->assertUnprocessable()->assertJsonValidationErrors('pin');
         $this->api('POST', '/api/v1/prisoner/recover', $identity + ['proof' => '1990-03-15'] + $newPin)->assertOk()->assertJsonStructure(['token']);
         $this->api('POST', '/api/v1/prisoner/login', $identity + ['secret' => self::PIN])->assertUnauthorized();
@@ -191,8 +188,7 @@ class PrisonerCabinetTest extends TestCase
         $this->api('POST', '/api/v1/prisoner/recovery', ['current' => self::PIN, 'method' => 'question', 'question' => 'birth_place', 'answer' => 'Кокшетау'], $token)
             ->assertOk()->assertJsonPath('profile.recovery_method', 'question')
             ->assertJsonPath('profile.recovery_question', Prisoner::SECURITY_QUESTIONS['birth_place']);
-        $this->api('POST', '/api/v1/prisoner/find', $identity)->assertJsonPath('matches.0.recovery', 'question')
-            ->assertJsonPath('matches.0.recovery_question', Prisoner::SECURITY_QUESTIONS['birth_place']);
+        $this->api('POST', '/api/v1/prisoner/find', $identity)->assertJsonMissingPath('matches.0.recovery_question');
 
         // Теперь дата рождения не подходит, а ответ на вопрос — да.
         $this->api('POST', '/api/v1/prisoner/recover', $identity + ['proof' => '1990-03-15', 'pin' => '735102', 'pin_confirmation' => '735102'])
@@ -204,11 +200,11 @@ class PrisonerCabinetTest extends TestCase
         $this->api('POST', '/api/v1/prisoner/recovery', ['current' => '735102', 'method' => 'birth_date'], $token)
             ->assertOk()->assertJsonPath('profile.recovery_method', 'birth_date');
 
-        // Смена пароля в настройках — тоже 6 цифр и не простой.
-        $this->api('POST', '/api/v1/prisoner/credentials', ['current' => '735102', 'pin' => '123456', 'pin_confirmation' => '123456'], $token)
+        // Смена пароля в настройках — тоже 6 цифр; простой пароль разрешён.
+        $this->api('POST', '/api/v1/prisoner/credentials', ['current' => '735102', 'pin' => '12345', 'pin_confirmation' => '12345'], $token)
             ->assertUnprocessable()->assertJsonValidationErrors('pin');
-        $this->api('POST', '/api/v1/prisoner/credentials', ['current' => '735102', 'pin' => '940271', 'pin_confirmation' => '940271'], $token)->assertOk();
-        $this->api('POST', '/api/v1/prisoner/login', $identity + ['secret' => '940271'])->assertOk();
+        $this->api('POST', '/api/v1/prisoner/credentials', ['current' => '735102', 'pin' => '111111', 'pin_confirmation' => '111111'], $token)->assertOk();
+        $this->api('POST', '/api/v1/prisoner/login', $identity + ['secret' => '111111'])->assertOk();
     }
 
     public function test_people_registered_earlier_with_twelve_digits_or_question_still_log_in(): void
@@ -225,7 +221,7 @@ class PrisonerCabinetTest extends TestCase
         $this->api('POST', '/api/v1/prisoner/login', ['full_name' => 'Иванов Иван', 'squad' => '7', 'prisoner_id' => $prisoner->id, 'secret' => '900101300123'])->assertOk();
         $this->api('POST', '/api/v1/prisoner/login', ['full_name' => 'Иванов Иван', 'condition' => 'ordinary', 'prisoner_id' => $prisoner->id, 'secret' => '900101300123'])->assertOk();
         $this->api('POST', '/api/v1/prisoner/find', ['full_name' => 'сидоров петр', 'condition' => 'ordinary'])
-            ->assertJsonPath('matches.0.question', Prisoner::SECURITY_QUESTIONS['grandmother'])->assertJsonPath('matches.0.recovery', 'question');
+            ->assertJsonPath('matches.0.id', $other->id)->assertJsonMissingPath('matches.0.question');
         $this->api('POST', '/api/v1/prisoner/login', ['full_name' => 'Сидоров Пётр', 'condition' => 'ordinary', 'prisoner_id' => $other->id, 'secret' => '  айгүль   елкина '])->assertOk();
         // Даты рождения у Иванова нет — восстановить сам не может, только сотрудник.
         $this->api('POST', '/api/v1/prisoner/recover', ['full_name' => 'Иванов Иван', 'condition' => 'ordinary', 'prisoner_id' => $prisoner->id,
@@ -350,14 +346,19 @@ class PrisonerCabinetTest extends TestCase
         $this->patch($base, $settings + ['spending_mode' => 'norm'])->assertSessionHasNoErrors();
         $this->assertSame(now('Asia/Almaty')->startOfMonth()->toDateString(), $prisoner->fresh()->limit_started_on->toDateString());
 
+        // Загруженным из списка сразу ставится норма учреждения по их условиям; рядом с условиями видна норма в МРП.
+        $this->assertSame('norm', $kuznetsov->spending_mode);
         $this->get('/admin/prisoners/people?institution_id='.$institution->id.'&limit=with')->assertOk()
-            ->assertSee('Иванов Иван Петрович')->assertDontSee('Сидоров Сидор')->assertSee('Планшеты учреждения')->assertSee('Импорт списка');
-        $this->get('/admin/prisoners/people?limit=without')->assertOk()->assertSee('Сидоров Сидор')->assertDontSee('Иванов Иван Петрович');
+            ->assertSee('Иванов Иван Петрович')->assertSee('Сидоров Сидор')->assertSee('Обычные (6 МРП)')->assertSee('Строгие (2 МРП)')
+            ->assertSee('Планшеты учреждения')->assertSee('Импорт списка');
+        $this->get('/admin/prisoners/people?limit=without')->assertOk()->assertDontSee('Сидоров Сидор')->assertDontSee('Иванов Иван Петрович');
+        $this->get('/admin/prisoners/'.$kuznetsov->id)->assertOk()->assertSee('Облегчённые ·', false);
         $this->get('/admin/prisoners/people?registered=no')->assertOk()->assertSee('Не зарегистрирован');
 
         // Норма 6 МРП = 25 950 ₸ на товары; доставка 3 000 ₸ сверх лимита.
         $this->bindTablet($institution);
         $token = $this->register($prisoner->fresh());
+        $this->api('GET', '/api/v1/prisoner/profile', [], $token)->assertJsonPath('condition', 'Обычные')->assertJsonPath('condition_norm_mrp', 6);
         $product = Product::create(['name' => 'Чай', 'price' => 25950, 'stock' => 10, 'is_active' => true]);
         $buy = fn (int $qty) => $this->api('POST', '/api/v1/prisoner/purchases', [
             'request_id' => (string) Str::uuid(), 'items' => [['product_id' => $product->id, 'quantity' => $qty]],
@@ -370,7 +371,7 @@ class PrisonerCabinetTest extends TestCase
 
         $order = Order::firstOrFail();
         $this->get('/admin/orders/'.$order->id.'/receipt')->assertOk()->assertSee('От кого (ФИО):')
-            ->assertSee('Экземпляр 3 из 3')->assertSee('Сам получатель — оплата с баланса Dosmart')->assertSee('Иванов Иван Петрович');
+            ->assertSee('Экземпляр 3 из 3')->assertSee('Сам получатель — оплата со счёта Dosmart')->assertSee('Иванов Иван Петрович');
         $this->get($base)->assertOk()->assertSee('Оператор Айжан')->assertSee('Доставка в лимит не входит')->assertSee('Сбросить регистрацию');
     }
 }

@@ -117,17 +117,37 @@ class Store extends ChangeNotifier {
     return sent != null;
   }
 
+  /// Код учреждения, зашитый в сборку для планшетов одного учреждения (Kora MDM).
+  /// Пусто в обычной сборке — тогда сотрудник вводит код вручную.
+  static const builtInTabletCode = String.fromEnvironment(
+    'DOSMART_TABLET_CODE',
+  );
+
   Future<void> loadTablet() async {
     tablet = await tabletStorage.load();
     api.tabletToken = tablet?.token;
     notifyListeners();
-    if (tablet == null) return;
-    try {
-      await api.checkTablet();
-    } on ShopException catch (e) {
-      // Код учреждения сменили в админке — нужна повторная настройка.
-      if (e.status == 428 || e.status == 403) await _forgetTablet();
-    } catch (_) {}
+    if (tablet != null) {
+      try {
+        await api.checkTablet();
+      } on ShopException catch (e) {
+        // Код учреждения сменили в админке — нужна повторная настройка.
+        if (e.status == 428 || e.status == 403) await _forgetTablet();
+      } catch (_) {}
+    }
+    await autoSetupTablet();
+  }
+
+  /// Привязка без участия сотрудника, если код зашит в сборку. Ошибки не показываем:
+  /// попробуем снова при следующем открытии кабинета.
+  Future<void> autoSetupTablet() async {
+    if (tablet != null || builtInTabletCode.isEmpty || sending) return;
+    final ok = await setupTablet(builtInTabletCode);
+    if (!ok) {
+      error = null;
+      errorStatus = null;
+      notifyListeners();
+    }
   }
 
   Future<void> _forgetTablet() async {
@@ -137,10 +157,14 @@ class Store extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// HTTP-код последней ошибки (409 — нужен ещё и день рождения).
+  int? errorStatus;
+
   Future<bool> _run(Future<void> Function() action) async {
     if (sending) return false;
     sending = true;
     error = null;
+    errorStatus = null;
     notice = null;
     notifyListeners();
     var ok = false;
@@ -149,6 +173,7 @@ class Store extends ChangeNotifier {
       ok = true;
     } on ShopException catch (e) {
       error = e.message;
+      errorStatus = e.status;
       if (e.status == 428) await _forgetTablet();
       if (e.status == 401 && _walletToken != null) clearWallet();
     } catch (_) {

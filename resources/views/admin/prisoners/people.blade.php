@@ -69,7 +69,7 @@
                 <span><strong>{{ $prisoner->full_name }}</strong><small>{{ $prisoner->institution->name }}@if($prisoner->squad) · отряд {{ $prisoner->squad }}@endif</small></span>
                 <span class="limits-person-meta">
                     <span class="limits-balance">{{ number_format($prisoner->balance_minor / 100, 0, ',', ' ') }} ₸</span>
-                    <span class="badge badge-accent">{{ \App\Models\Prisoner::CONDITIONS[$prisoner->condition] }}</span>
+                    <span class="badge badge-accent">{{ app(\App\Services\PrisonerAccounts::class)->conditionLabel($prisoner) }}</span>
                     @if(($prisoner->spending_mode ?? 'unlimited') === 'unlimited')
                         <span class="badge badge-success">Без лимита</span>
                     @else

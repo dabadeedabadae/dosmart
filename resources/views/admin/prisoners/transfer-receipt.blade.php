@@ -24,7 +24,7 @@ p { margin:5px 0; }
 <div class="controls"><button type="button" onclick="window.print()">Печать / сохранить PDF</button></div>
 <main class="receipt">
 <h1>Dosmart</h1>
-<p class="center small">Квитанция о зачислении на баланс · не фискальный чек</p>
+<p class="center small">Квитанция о зачислении на счёт · не фискальный чек</p>
 <h2>№ {{ $transfer->application_number }}</h2>
 <div class="section">
 <p><strong>Отправитель:</strong><br>{{ $transfer->source === 'relative' ? ($transfer->sender_name ?: 'Родственник') : 'Перевод учреждения по заявлению осуждённого' }}</p>

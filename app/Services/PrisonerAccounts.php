@@ -26,7 +26,9 @@ class PrisonerAccounts
             'institution' => $prisoner->institution->name,
             'squad' => $prisoner->squad,
             'condition' => Prisoner::CONDITIONS[$prisoner->condition] ?? $prisoner->condition,
-            'balance_minor' => $prisoner->balance_minor,
+            'condition_norm_mrp' => $this->conditionNorm($prisoner),
+            // Новая карточка ещё не перечитана из базы — счёт по умолчанию 0, а не null.
+            'balance_minor' => (int) $prisoner->balance_minor,
             'spending_mode' => $prisoner->spending_mode ?? 'unlimited',
             'monthly_limit_minor' => $limit['base'] ?? null,
             'limit_carried_minor' => $limit['carried'] ?? 0,
@@ -45,7 +47,7 @@ class PrisonerAccounts
         ];
     }
 
-    /** Только лимиты — для родственника, который сам собирает корзину на сайте. Баланс не показываем. */
+    /** Только лимиты — для родственника, который сам собирает корзину на сайте. Счёт не показываем. */
     public function limitsOnly(Prisoner $prisoner): array
     {
         $limit = $this->limitState($prisoner);
@@ -99,6 +101,23 @@ class PrisonerAccounts
     }
 
     /** Значение на год или на последний более ранний год, если на этот ещё не задано. */
+    /** Норма покупок учреждения (ст. 105 УИК) для условий человека в текущем году, МРП в месяц. */
+    public function conditionNorm(Prisoner $prisoner): ?int
+    {
+        $norm = self::forYear($prisoner->institution?->spending_limits_mrp ?? [], now('Asia/Almaty')->year)[$prisoner->condition] ?? null;
+
+        return $norm === null ? null : (int) $norm;
+    }
+
+    /** «Облегчённые (12 МРП)» — условия и норма рядом. */
+    public function conditionLabel(Prisoner $prisoner): string
+    {
+        $label = Prisoner::CONDITIONS[$prisoner->condition] ?? (string) $prisoner->condition;
+        $norm = $this->conditionNorm($prisoner);
+
+        return $norm === null ? $label : $label.' ('.$norm.' МРП)';
+    }
+
     private static function forYear(array $byYear, int $year): mixed
     {
         if (array_key_exists($year, $byYear)) {
@@ -121,7 +140,7 @@ class PrisonerAccounts
             || self::mrpRate($prisoner->institution, $year) === null;
     }
 
-    /** Потрачено на товары с баланса за месяц. Доставка — отдельная услуга и в лимит не входит. */
+    /** Потрачено на товары со счёта за месяц. Доставка — отдельная услуга и в лимит не входит. */
     public function monthlySpent(Prisoner $prisoner, ?Carbon $when = null): int
     {
         $start = ($when ?? now())->copy()->timezone('Asia/Almaty')->startOfMonth();
@@ -205,7 +224,7 @@ class PrisonerAccounts
         return $this->limitState($prisoner, $when)['remaining'] ?? null;
     }
 
-    /** Движение по балансу: зачисления, сторно, покупки и возвраты — новые сверху. */
+    /** Движение по счёту: зачисления, сторно, покупки и возвраты — новые сверху. */
     public function history(Prisoner $prisoner, int $limit = 50): array
     {
         $rows = collect();
@@ -291,7 +310,7 @@ class PrisonerAccounts
             throw ValidationException::withMessages([$field => 'Размер МРП на текущий год не настроен. Обратитесь к сотруднику магазина.']);
         }
         if ($budget['norm_mrp'] === 0 || $amount > $budget['remaining_minor']) {
-            throw ValidationException::withMessages([$field => 'Стоимость товаров превышает доступный месячный лимит передач.']);
+            throw ValidationException::withMessages([$field => 'Сумма товаров больше лимита получателя на этот месяц. Уберите лишнее из корзины.']);
         }
     }
 
@@ -307,39 +326,45 @@ class PrisonerAccounts
         $this->assertParcelBudget($prisoner, $newSubtotal, 'changes', $order->id);
     }
 
+    /**
+     * Получатель передачи по точным ФИО в учреждении (список учреждения или регистрация на планшете).
+     * Возвращает null, если не найден; коллекцию из 2+ — если полные тёзки.
+     */
+    public function recipientByName(int $institutionId, string $name)
+    {
+        $name = Prisoner::normalizeName($name);
+        if (mb_strlen($name) < 3) {
+            return collect();
+        }
+
+        return Prisoner::where('institution_id', $institutionId)->get(['id', 'full_name'])
+            ->filter(fn (Prisoner $p) => Prisoner::normalizeName($p->full_name) === $name)->values();
+    }
+
+    /** Остаток для родственника на сайте: только лимит, ничего больше. */
+    public function recipientLimit(Prisoner $prisoner): array
+    {
+        return [
+            'parcel_budget_minor' => $this->parcelBudget($prisoner)['remaining_minor'] ?? null,
+            'parcels_available' => $this->parcelsAvailable($prisoner),
+        ];
+    }
+
     // Called inside the order transaction while holding the order/draft lock.
-    public function reserveParcel(Order $order, Institution $institution, ?string $code, ?string $birthDate = null): void
+    // Если у учреждения заданы нормы передач, получатель должен быть в списке учреждения, а корзина — в пределах лимита.
+    public function reserveParcel(Order $order, Institution $institution): void
     {
         if ($order->prisoner_order_type !== null || ! $institution->requiresParcelCode()) {
             return;
         }
-
-        // Код от сотрудника — точная привязка к карточке.
-        if ($code !== null && trim($code) !== '') {
-            $prisoner = Prisoner::where('parcel_code', strtoupper(trim($code)))->where('institution_id', $institution->id)->lockForUpdate()->first();
-            if (! $prisoner) {
-                throw ValidationException::withMessages(['parcel_code' => 'Код получателя не подходит к выбранному учреждению. Проверьте код или оставьте поле пустым.']);
-            }
-            $this->reserveParcelFor($order, $institution, $prisoner);
-
-            return;
+        $found = $this->recipientByName($institution->id, (string) $order->prisoner_name);
+        if ($found->isEmpty()) {
+            throw ValidationException::withMessages(['prisoner_name' => 'Такого человека нет в списке учреждения. Проверьте ФИО — полностью, как в документах.']);
         }
-
-        // Лимит проверяем, только если у получателя есть кабинет на планшете.
-        // Нет кабинета — заказ оформляется как раньше, без проверки.
-        $name = Prisoner::normalizeName((string) $order->prisoner_name);
-        $hasAccount = Prisoner::where('institution_id', $institution->id)->whereNotNull('registered_at')->get(['id', 'full_name'])
-            ->contains(fn (Prisoner $p) => Prisoner::normalizeName($p->full_name) === $name);
-        if (! $hasAccount) {
-            return;
+        if ($found->count() > 1) {
+            throw ValidationException::withMessages(['prisoner_name' => 'В учреждении несколько человек с такими ФИО. Напишите нам в WhatsApp — оформим заказ вручную.']);
         }
-        if (! $birthDate) {
-            throw ValidationException::withMessages(['recipient_birth_date' => 'У получателя есть личный кабинет, и в учреждении действует лимит передач. Укажите его дату рождения — проверим, сколько передач осталось.']);
-        }
-        $prisoner = Prisoner::findRegistered($institution->id, (string) $order->prisoner_name, $birthDate);
-        if (! $prisoner) {
-            throw ValidationException::withMessages(['recipient_birth_date' => 'Дата рождения не совпадает с данными получателя. Проверьте её.']);
-        }
+        $prisoner = Prisoner::whereKey($found->first()->id)->lockForUpdate()->firstOrFail();
 
         $this->reserveParcelFor($order, $institution, $prisoner);
     }
@@ -353,10 +378,10 @@ class PrisonerAccounts
         $prisoner = Prisoner::whereKey($prisoner->id)->lockForUpdate()->firstOrFail();
         $prisoner->setRelation('institution', $institution);
         if ($this->parcelsAvailable($prisoner) === 0) {
-            throw ValidationException::withMessages(['parcel_code' => 'У получателя закончились передачи на этот год по закону (ст. 136, 138 УИК РК). Заказ оформить нельзя.']);
+            throw ValidationException::withMessages(['prisoner_name' => 'У получателя закончились передачи на этот год. Заказ оформить нельзя.']);
         }
 
-        $this->assertParcelBudget($prisoner, self::minor($order->subtotal), 'parcel_code');
+        $this->assertParcelBudget($prisoner, self::minor($order->subtotal), 'prisoner_name');
 
         $order->update([
             'prisoner_id' => $prisoner->id,
@@ -378,7 +403,7 @@ class PrisonerAccounts
             $prisoner = Prisoner::whereKey($profile->id)->lockForUpdate()->firstOrFail();
             abort_unless((int) $prisoner->institution_id === (int) $profile->institution_id && $institution->is_active, 401);
             if ($prisoner->needsReview()) {
-                throw ValidationException::withMessages(['balance' => 'Сотрудник магазина ещё не проверил вашу регистрацию: условия содержания и лимит. Покупка с баланса станет доступна после проверки.']);
+                throw ValidationException::withMessages(['balance' => 'Сотрудник магазина ещё не проверил вашу регистрацию: условия содержания и лимит. Покупка со счёта станет доступна после проверки.']);
             }
             $prisoner->setRelation('institution', $institution);
             $existing = $prisoner->orders()->where('purchase_request_id', $data['request_id'])->first();
@@ -395,7 +420,7 @@ class PrisonerAccounts
                 throw ValidationException::withMessages(['items' => 'Сумма изменилась. Обновите корзину и проверьте итог.']);
             }
             if ($total > $prisoner->balance_minor) {
-                throw ValidationException::withMessages(['balance' => 'На балансе недостаточно денег.']);
+                throw ValidationException::withMessages(['balance' => 'На счёте недостаточно денег.']);
             }
             $purchasedAt = now();
             $remaining = $this->monthlyRemaining($prisoner, $purchasedAt);
@@ -421,7 +446,7 @@ class PrisonerAccounts
             $order->created_at = $purchasedAt;
             $order->save();
             $order->items()->createMany($quote['items']);
-            $order->statusHistory()->create(['status' => 'paid', 'comment' => 'Оплачено с баланса Dosmart.']);
+            $order->statusHistory()->create(['status' => 'paid', 'comment' => 'Оплачено со счёта Dosmart.']);
             $prisoner->decrement('balance_minor', $total);
 
             return $order;

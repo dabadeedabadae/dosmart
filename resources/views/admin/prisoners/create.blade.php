@@ -4,7 +4,7 @@
 @section('content')
 <div class="limits-page">
 <a class="limits-back" href="{{ route('admin.prisoners.people', request()->only('institution_id')) }}">← К списку</a>
-<header class="limits-hero"><div><span class="limits-kicker">Учёт лимитов</span><h1 class="page-title">Добавить человека</h1><p>На планшете человек находит себя по ФИО и отряду и сам ставит пароль. Баланс после создания — 0 ₸. Целый список удобнее загрузить через «Импорт» на странице учреждения.</p></div></header>
+<header class="limits-hero"><div><span class="limits-kicker">Учёт лимитов</span><h1 class="page-title">Добавить человека</h1><p>На планшете человек находит себя по ФИО и отряду и сам ставит пароль. На счёте после создания — 0 ₸. Целый список удобнее загрузить через «Импорт» на странице учреждения.</p></div></header>
 <section class="card limits-panel" style="max-width:760px">
     <h2 class="limits-heading">Данные получателя</h2>
     <form method="post" action="{{ route('admin.prisoners.store') }}">

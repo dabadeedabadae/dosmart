@@ -91,28 +91,9 @@ class PilotController extends Controller
         return response()->view('shop.pilot-checkout', compact('draft', 'quote', 'institutions'))->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
     }
 
-    public function parcelLimit(Request $request, string $code, PrisonerAccounts $accounts)
-    {
-        $draft = $this->draft($code);
-        abort_if($draft->order_id, 404);
-        $data = $request->validate([
-            'institution_id' => 'required|integer',
-            'parcel_code' => ['required', 'regex:/^[a-fA-F0-9]{24}$/'],
-        ]);
-        $prisoner = Prisoner::with('institution')->where('institution_id', $data['institution_id'])
-            ->where('parcel_code', strtoupper($data['parcel_code']))->first();
-        abort_unless($prisoner && $prisoner->institution->is_active && $prisoner->institution->requiresParcelCode(), 404);
-
-        return response()->json([
-            'budget' => $accounts->parcelBudget($prisoner),
-            'parcels_available' => $accounts->parcelsAvailable($prisoner),
-        ])->header('Cache-Control', 'private, no-store');
-    }
-
     /**
-     * Лимиты получателя для родственника, который сам собирает корзину. Нужны точные ФИО,
-     * учреждение и дата рождения (её человек указал при регистрации в кабинете) — чтобы
-     * посторонний по одному имени не узнал, где человек и какие у него лимиты.
+     * Лимит получателя для родственника, который собирает корзину: только остаток, без других данных.
+     * Работает, когда у учреждения заданы нормы передач.
      */
     public function recipientLimits(Request $request, string $code, PrisonerAccounts $accounts)
     {
@@ -121,12 +102,19 @@ class PilotController extends Controller
         $data = $request->validate([
             'institution_id' => 'required|integer',
             'prisoner_name' => 'required|string|min:3|max:255',
-            'birth_date' => 'required|date_format:Y-m-d',
         ]);
-        $prisoner = Prisoner::findRegistered((int) $data['institution_id'], $data['prisoner_name'], $data['birth_date']);
-        abort_unless($prisoner && $prisoner->institution->is_active, 404, 'Получатель не найден.');
+        $institution = Institution::whereKey($data['institution_id'])->where('is_active', true)->first();
+        if (! $institution || ! $institution->requiresParcelCode()) {
+            return response()->json(['limited' => false])->header('Cache-Control', 'private, no-store');
+        }
+        $found = $accounts->recipientByName($institution->id, $data['prisoner_name']);
+        if ($found->count() !== 1) {
+            return response()->json(['limited' => true, 'found' => false, 'namesakes' => $found->count() > 1])->header('Cache-Control', 'private, no-store');
+        }
+        $prisoner = Prisoner::with('institution')->findOrFail($found->first()->id);
 
-        return response()->json($accounts->limitsOnly($prisoner))->header('Cache-Control', 'private, no-store');
+        return response()->json(['limited' => true, 'found' => true] + $accounts->recipientLimit($prisoner))
+            ->header('Cache-Control', 'private, no-store');
     }
 
     public function checkout(Request $request, string $code, PilotCheckout $service)
@@ -145,8 +133,6 @@ class PilotController extends Controller
         $request->merge(['contact_phone' => '+'.$phone]);
         $data = $request->validate([
             'squad_number' => 'nullable|string|max:50',
-            'parcel_code' => 'nullable|string|size:24',
-            'recipient_birth_date' => 'nullable|date_format:Y-m-d',
             'prisoner_name' => 'required|string|max:255',
             'relative_name' => 'required|string|min:3|max:255',
             'institution_id' => ['required', 'integer', Rule::exists('institutions', 'id')->where('is_active', true)],

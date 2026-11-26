@@ -144,7 +144,7 @@ class PrisonerController extends Controller
     {
         $prisoner->forceFill(['reviewed_at' => now()])->save();
 
-        return back()->with('success', 'Регистрация проверена. Покупки с баланса доступны.');
+        return back()->with('success', 'Регистрация проверена. Покупки со счёта доступны.');
     }
 
     /** Если под человеком зарегистрировался кто-то другой — сбрасываем пароль, вопрос и код для родственников. */
@@ -245,7 +245,7 @@ class PrisonerController extends Controller
                 ? 'Этот платёж уже использован для пополнения.' : 'Такое заявление уже зарегистрировано.']);
         }
 
-        return back()->with('success', 'Баланс пополнен на '.number_format((float) $data['amount'], 2, ',', ' ').' ₸.');
+        return back()->with('success', 'Счёт пополнен на '.number_format((float) $data['amount'], 2, ',', ' ').' ₸.');
     }
 
     public function tabletCode(Institution $institution)
@@ -312,8 +312,9 @@ class PrisonerController extends Controller
                 Prisoner::create([
                     'full_name' => preg_replace('/\s+/u', ' ', $name), 'squad' => $squad, 'iin' => $iin ?: null,
                     'institution_id' => $institution->id, 'condition' => $conditionKey ?? 'ordinary',
-                    'parcel_code' => strtoupper(bin2hex(random_bytes(12))),
-                ])->forceFill(['reviewed_at' => now()])->save();
+                    // Лимит покупок — норма учреждения по условиям (ст. 105 УИК). Работающим сотрудник ставит «без лимита».
+                    'spending_mode' => 'norm', 'parcel_code' => strtoupper(bin2hex(random_bytes(12))),
+                ])->forceFill(['reviewed_at' => now(), 'limit_started_on' => now('Asia/Almaty')->startOfMonth()->toDateString()])->save();
                 $created++;
             }
         });
@@ -367,7 +368,7 @@ class PrisonerController extends Controller
             throw ValidationException::withMessages(['payment_reference' => 'Этот платёж уже использован для пополнения.']);
         }
 
-        return back()->with('success', 'Заявка '.$depositRequest->number().' зачислена на баланс.');
+        return back()->with('success', 'Заявка '.$depositRequest->number().' зачислена на счёт.');
     }
 
     public function rejectRequest(Request $request, DepositRequest $depositRequest)
@@ -496,7 +497,7 @@ class PrisonerController extends Controller
                 }
                 if ($target === 'reversed' && $transfer->status === 'confirmed') {
                     if ($prisoner->balance_minor < $transfer->amount_minor) {
-                        throw ValidationException::withMessages(['reason' => 'На балансе недостаточно средств для сторнирования.']);
+                        throw ValidationException::withMessages(['reason' => 'На счёте недостаточно средств для сторнирования.']);
                     }
                     $prisoner->decrement('balance_minor', $transfer->amount_minor);
                 } elseif ($target !== 'rejected' || $transfer->status !== 'pending') {

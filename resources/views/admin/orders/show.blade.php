@@ -151,7 +151,7 @@
 
         @if($order->prisoner_order_type === 'balance')
         <div class="card" style="padding:20px">
-            <h2 style="font-size:16px">Покупка с баланса Dosmart</h2>
+            <h2 style="font-size:16px">Покупка со счёта Dosmart</h2>
             <a href="{{ route('admin.prisoners.show', $order->prisoner_id) }}">Карточка получателя</a>
         </div>
         @else

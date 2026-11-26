@@ -100,6 +100,7 @@ class WalletProfile {
   final String? squad, authMethod, familyCode, recoveryMethod, recoveryQuestion;
   final int balanceMinor, deliveryMinor, monthlySpentMinor, limitCarriedMinor;
   final int? monthlyRemainingMinor, monthlyLimitMinor, parcelsAvailable;
+  final int? conditionNormMrp;
   final bool familyCodeActive, birthDateSet, reviewed;
 
   const WalletProfile({
@@ -108,6 +109,7 @@ class WalletProfile {
     required this.deliveryMinor,
     this.institution = '',
     this.condition = '',
+    this.conditionNormMrp,
     this.squad,
     this.authMethod,
     this.familyCode,
@@ -127,11 +129,12 @@ class WalletProfile {
     fullName: json['full_name'] as String,
     institution: json['institution'] as String? ?? '',
     condition: json['condition'] as String? ?? '',
+    conditionNormMrp: (json['condition_norm_mrp'] as num?)?.toInt(),
     squad: json['squad'] as String?,
     authMethod: json['auth_method'] as String?,
     familyCode: json['family_code'] as String?,
-    balanceMinor: json['balance_minor'] as int,
-    deliveryMinor: json['delivery_minor'] as int,
+    balanceMinor: (json['balance_minor'] as num?)?.toInt() ?? 0,
+    deliveryMinor: (json['delivery_minor'] as num?)?.toInt() ?? 0,
     monthlySpentMinor: json['monthly_spent_minor'] as int? ?? 0,
     limitCarriedMinor: json['limit_carried_minor'] as int? ?? 0,
     monthlyLimitMinor: json['monthly_limit_minor'] as int?,

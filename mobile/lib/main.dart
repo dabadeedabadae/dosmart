@@ -136,6 +136,8 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
   ];
   String? accCondition;
   bool regConsent = false;
+  // Показать пароль; спросить дату при входе (тёзки); поле ответа на вопрос.
+  bool showPin = false, loginNeedsDate = false, recShowProof = false;
   // Экран кабинета без входа: login | register | recover.
   String accMode = 'login';
   String setRecovery = 'birth_date', setQuestion = 'grandmother';
@@ -214,6 +216,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     accCondition = null;
     setRecovery = 'birth_date';
     regConsent = false;
+    showPin = loginNeedsDate = recShowProof = false;
     accMode = 'login';
     walletMode = false;
     institution = null;
@@ -400,13 +403,13 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     text('Нужные вещи для вас', size: 32, bold: true),
     const SizedBox(height: 12),
     text(
-      'Соберите корзину. Вы сможете оплатить с баланса Dosmart или отправить заявку для оплаты родственником.',
+      'Соберите корзину. Вы сможете оплатить со счёта Dosmart или отправить заявку для оплаты родственником.',
     ),
     const SizedBox(height: 12),
     text('Доставка — 3 000 ₸', size: 20, bold: true),
     text('Заявки обрабатываются с 17:00 до 21:00 по времени Казахстана.'),
     const SizedBox(height: 20),
-    // Первый выбор: войти в кабинет (баланс, лимит, покупка с баланса)
+    // Первый выбор: войти в кабинет (счёт, лимит, покупка со счёта)
     // или сразу в каталог — заказ, который оплатит родственник.
     SizedBox(
       height: 72,
@@ -436,7 +439,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     ),
     const SizedBox(height: 8),
     text(
-      'В кабинете — ваш баланс и лимит, покупка с баланса и заказ через родственника. '
+      'В кабинете — ваш счёт и лимит, покупка со счёта и заказ через родственника. '
       'Без входа можно собрать заказ, который оплатит родственник.',
       size: 14,
     ),
@@ -715,7 +718,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
             });
           },
           child: Text(
-            walletMode ? 'Оплатит родственник' : 'Купить с баланса Dosmart',
+            walletMode ? 'Оплатит родственник' : 'Купить со счёта Dosmart',
           ),
         ),
       if (walletMode)
@@ -884,8 +887,8 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     if (!store.walletSignedIn || profile == null) {
       return [
         text(
-          'Чтобы купить с баланса, войдите в личный кабинет. '
-          'Пополнить баланс можно заявлением в учреждении или через родственников.',
+          'Чтобы купить со счёта, войдите в личный кабинет. '
+          'Пополнить счёт можно заявлением в учреждении или через родственников.',
         ),
         const SizedBox(height: 12),
         FilledButton.icon(
@@ -903,18 +906,18 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     final needSquad = (profile.squad ?? '').isEmpty;
     return [
       text(profile.fullName, bold: true),
-      text('Баланс: ${money(profile.balanceMinor)}'),
+      text('Счёт: ${money(profile.balanceMinor)}'),
       text(
         remaining == null
             ? 'Лимит на покупки: без ограничения'
             : 'Остаток лимита на товары: ${money(remaining)}',
       ),
       text('Доставка: ${money(profile.deliveryMinor)} — в лимит не входит'),
-      text('К списанию с баланса: ${money(total)}', bold: true),
+      text('К списанию со счёта: ${money(total)}', bold: true),
       if (!enough && !store.frozen)
         text(
           withinLimit
-              ? 'На балансе недостаточно денег для этой корзины.'
+              ? 'На счёте недостаточно денег для этой корзины.'
               : 'Товары в корзине превышают остаток лимита на этот месяц.',
         ),
       if (needSquad)
@@ -951,7 +954,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
                 }
               }
             : null,
-        child: Text(store.frozen ? 'Повторить отправку' : 'Оплатить с баланса'),
+        child: Text(store.frozen ? 'Повторить отправку' : 'Оплатить со счёта'),
       ),
       if (store.error != null) text(store.error!, bold: true),
     ];
@@ -968,6 +971,10 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
   void openAccount() {
     store.error = null;
     setState(() => page = 4);
+    // Не было связи при запуске — привяжем планшет сейчас (если код зашит в сборку).
+    if (store.tablet == null) {
+      store.autoSetupTablet().then((_) => store.loadSquads());
+    }
     if (store.walletSignedIn) {
       store.loadHistory();
     } else {
@@ -989,104 +996,63 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
           ),
         );
 
-  Widget pinField(
-    TextEditingController c,
-    String label, {
-    String? helper,
-    int length = 12,
-  }) => TextField(
-    controller: c,
-    enabled: !store.sending,
-    keyboardType: TextInputType.number,
-    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-    maxLength: length,
-    obscureText: true,
-    style: const TextStyle(fontSize: 22, letterSpacing: 4),
-    decoration: InputDecoration(labelText: label, helperText: helper),
-  );
-
-  /// Дата рождения тремя полями: день, месяц, год (цифровая клавиатура).
-  Widget birthDateFields(
-    TextEditingController day,
-    TextEditingController month,
-    TextEditingController year, {
-    String label = 'Дата рождения',
-  }) {
-    Widget field(TextEditingController c, String hint, int length) => Expanded(
-      flex: length,
-      child: TextField(
+  Widget pinField(TextEditingController c, String label, {int length = 12}) =>
+      TextField(
         controller: c,
         enabled: !store.sending,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         maxLength: length,
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 22),
-        decoration: InputDecoration(labelText: hint, counterText: ''),
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        text(label, size: 15, bold: true),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            field(day, 'День', 2),
-            const SizedBox(width: 10),
-            field(month, 'Месяц', 2),
-            const SizedBox(width: 10),
-            field(year, 'Год', 4),
-          ],
+        obscureText: !showPin,
+        style: const TextStyle(fontSize: 22, letterSpacing: 4),
+        decoration: InputDecoration(
+          labelText: label,
+          counterText: '',
+          suffixIcon: IconButton(
+            tooltip: showPin ? 'Скрыть' : 'Показать',
+            icon: Icon(showPin ? Icons.visibility_off : Icons.visibility),
+            onPressed: () => setState(() => showPin = !showPin),
+          ),
         ),
-      ],
-    );
-  }
+      );
+
+  /// Дата рождения одним полем: цифры, точки ставятся сами (ДД.ММ.ГГГГ).
+  Widget dateField(TextEditingController c, {String label = 'Дата рождения'}) =>
+      TextField(
+        controller: c,
+        enabled: !store.sending,
+        keyboardType: TextInputType.number,
+        inputFormatters: [DateMaskFormatter()],
+        style: const TextStyle(fontSize: 22, letterSpacing: 2),
+        decoration: InputDecoration(labelText: label, hintText: 'ДД.ММ.ГГГГ'),
+      );
 
   /// ГГГГ-ММ-ДД или null, если дата неверная.
-  String? birthDate(
-    TextEditingController day,
-    TextEditingController month,
-    TextEditingController year,
-  ) {
-    final d = int.tryParse(day.text), m = int.tryParse(month.text);
-    final y = int.tryParse(year.text);
-    if (d == null || m == null || y == null || y < 1920) return null;
-    final date = DateTime(y, m, d);
-    if (date.year != y || date.month != m || date.day != d) return null;
+  String? birthDate(TextEditingController c) {
+    final m = RegExp(r'^(\d{2})\.(\d{2})\.(\d{4})$').firstMatch(c.text);
+    if (m == null) return null;
+    final d = int.parse(m[1]!), mo = int.parse(m[2]!), y = int.parse(m[3]!);
+    if (y < 1920) return null;
+    final date = DateTime(y, mo, d);
+    if (date.year != y || date.month != mo || date.day != d) return null;
     if (date.isAfter(DateTime.now().subtract(const Duration(days: 365 * 14)))) {
       return null;
     }
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '$y-${two(m)}-${two(d)}';
+    return '${m[3]}-${m[2]}-${m[1]}';
   }
 
-  /// Новый пароль: ровно 6 цифр и совпадает с повтором.
+  /// Новый пароль: 6 цифр. Повтор не спрашиваем — есть кнопка «показать».
   bool checkNewPin(TextEditingController pin, TextEditingController pin2) {
     if (!RegExp(r'^[0-9]{6}$').hasMatch(pin.text)) {
-      snack('Пароль — ровно 6 цифр.');
+      snack('Пароль — 6 цифр.');
       return false;
     }
-    if (pin.text != pin2.text) {
-      snack('Пароли не совпадают.');
-      return false;
-    }
+    pin2.text = pin.text;
     return true;
   }
 
   Widget newPinFields(TextEditingController pin, TextEditingController pin2) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          pinField(
-            pin,
-            'Придумайте пароль — 6 цифр',
-            helper: 'Не 123456, не одинаковые цифры и не дата рождения',
-            length: 6,
-          ),
-          pinField(pin2, 'Повторите пароль', length: 6),
-        ],
-      );
+      pinField(pin, 'Придумайте пароль — 6 цифр', length: 6);
 
   Widget questionFields(TextEditingController answer) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1112,10 +1078,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
         controller: answer,
         enabled: !store.sending,
         maxLength: 100,
-        decoration: const InputDecoration(
-          labelText: 'Ваш ответ',
-          helperText: 'Запомните ответ — его спросят, если забудете пароль',
-        ),
+        decoration: const InputDecoration(labelText: 'Ваш ответ'),
       ),
     ],
   );
@@ -1151,7 +1114,10 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     for (final c in [accSecret, accPin, accPin2, recProof, recPin, recPin2]) {
       c.clear();
     }
-    setState(() => accMode = mode);
+    setState(() {
+      showPin = recShowProof = false;
+      accMode = mode;
+    });
   }
 
   Widget nameField() => TextField(
@@ -1159,10 +1125,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     enabled: !store.sending,
     maxLength: 255,
     textCapitalization: TextCapitalization.words,
-    decoration: const InputDecoration(
-      labelText: 'Фамилия Имя Отчество',
-      hintText: 'Полностью, как в документах',
-    ),
+    decoration: const InputDecoration(labelText: 'Фамилия Имя Отчество'),
   );
 
   /// ФИО (минимум фамилия и имя) и дата рождения; null — если что-то не так.
@@ -1171,21 +1134,19 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
       snack('Введите фамилию и имя полностью.');
       return null;
     }
-    final date = birthDate(accDay, accMonth, accYear);
-    if (date == null) snack('Проверьте дату рождения.');
+    final date = birthDate(accDay);
+    if (date == null) snack('Проверьте дату рождения: ДД.ММ.ГГГГ.');
     return date;
   }
 
   Widget loginForm() => centered([
-    const Icon(Icons.account_circle_outlined, size: 64, color: ink),
-    const SizedBox(height: 12),
-    text('Вход в личный кабинет', size: 30, bold: true),
+    text('Вход', size: 30, bold: true),
     text(store.tablet!.institutionName, size: 15),
     const SizedBox(height: 20),
     nameField(),
-    birthDateFields(accDay, accMonth, accYear),
+    if (loginNeedsDate) dateField(accDay),
     const SizedBox(height: 12),
-    pinField(accSecret, 'Пароль — 6 цифр', length: 6),
+    pinField(accSecret, 'Пароль', length: 6),
     errorText(),
     const SizedBox(height: 8),
     FilledButton(
@@ -1197,57 +1158,71 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
       child: const Text('Забыли пароль?'),
     ),
     const SizedBox(height: 12),
-    OutlinedButton.icon(
+    OutlinedButton(
       onPressed: store.sending ? null : () => switchAccount('register'),
-      icon: const Icon(Icons.person_add_alt),
-      label: const Text('Я здесь впервые — зарегистрироваться'),
-    ),
-    const SizedBox(height: 24),
-    panel(
-      text(
-        'Как пополнить баланс: напишите заявление в администрации учреждения '
-        'или попросите родственников — для них в «Настройках» есть код.',
-        size: 15,
-      ),
+      child: const Text('Регистрация'),
     ),
   ]);
 
+  /// Вход по ФИО и паролю. Дату рождения спрашиваем, только если сервер
+  /// попросил (есть тёзка или сервер старой версии).
   Future<void> submitLogin() async {
-    final date = checkNameAndDate();
-    if (date == null) return;
+    if (!RegExp(r'^\S+\s+\S+').hasMatch(accName.text.trim())) {
+      snack('Введите фамилию и имя полностью.');
+      return;
+    }
+    var date = '';
+    if (loginNeedsDate) {
+      final d = checkNameAndDate();
+      if (d == null) return;
+      date = d;
+    }
     if (accSecret.text.trim().isEmpty) {
       snack('Введите пароль.');
       return;
     }
     final ok = await store.signIn(accName.text, date, accSecret.text);
+    if (!mounted) return;
+    if (!ok &&
+        !loginNeedsDate &&
+        const [409, 422].contains(store.errorStatus)) {
+      setState(() {
+        loginNeedsDate = true;
+        store.error = 'Укажите ещё дату рождения.';
+      });
+      return;
+    }
     accSecret.clear();
-    if (mounted && ok) store.loadHistory();
+    if (ok) store.loadHistory();
   }
 
   /// Забыли пароль: ФИО + дата рождения (+ ответ на вопрос, если выбирали его) + новый пароль.
   Widget recoveryForm() => centered([
-    text('Восстановление пароля', size: 30, bold: true),
+    text('Новый пароль', size: 30, bold: true),
     text(store.tablet!.institutionName, size: 15),
     const SizedBox(height: 20),
     nameField(),
-    birthDateFields(accDay, accMonth, accYear, label: 'Ваша дата рождения'),
-    const SizedBox(height: 12),
-    TextField(
-      controller: recProof,
-      enabled: !store.sending,
-      maxLength: 100,
-      decoration: const InputDecoration(
-        labelText: 'Ответ на контрольный вопрос',
-        helperText: 'Только если в настройках вы выбрали контрольный вопрос',
+    dateField(accDay),
+    if (recShowProof)
+      TextField(
+        controller: recProof,
+        enabled: !store.sending,
+        maxLength: 100,
+        decoration: const InputDecoration(
+          labelText: 'Ответ на контрольный вопрос',
+          counterText: '',
+        ),
+      )
+    else
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          onPressed: () => setState(() => recShowProof = true),
+          child: const Text('У меня контрольный вопрос'),
+        ),
       ),
-    ),
     const SizedBox(height: 8),
     newPinFields(recPin, recPin2),
-    text(
-      'Восстановить пароль можно не больше 3 раз в сутки. Сотрудник магазина '
-      'видит, когда пароль восстанавливали.',
-      size: 14,
-    ),
     errorText(),
     const SizedBox(height: 8),
     FilledButton(
@@ -1270,17 +1245,15 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
                 store.loadHistory();
               }
             },
-      child: Text(
-        store.sending ? 'Проверяем…' : 'Сохранить новый пароль и войти',
-      ),
+      child: Text(store.sending ? 'Проверяем…' : 'Сохранить и войти'),
     ),
     TextButton(
       onPressed: store.sending ? null : () => switchAccount('login'),
-      child: const Text('Назад ко входу'),
+      child: const Text('Назад'),
     ),
   ]);
 
-  /// Регистрация без поиска: ФИО, условия содержания, отряд, дата рождения, пароль.
+  /// Регистрация: ФИО, условия, отряд, дата рождения, пароль, согласие.
   Widget registerForm() => centered([
     text('Регистрация', size: 30, bold: true),
     text(store.tablet!.institutionName, size: 15),
@@ -1302,32 +1275,35 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
       maxLength: 50,
       decoration: const InputDecoration(
         labelText: 'Номер отряда',
-        helperText:
-            'Нужен для доставки. Если переведут — поменяете в настройках',
+        counterText: '',
       ),
     ),
-    birthDateFields(accDay, accMonth, accYear),
-    text(
-      'По ФИО и дате рождения вы будете входить и восстанавливать пароль.',
-      size: 13,
-    ),
-    const SizedBox(height: 16),
+    const SizedBox(height: 12),
+    dateField(accDay),
+    const SizedBox(height: 12),
     newPinFields(accPin, accPin2),
     const SizedBox(height: 8),
-    CheckboxListTile(
-      value: regConsent,
-      onChanged: store.sending
-          ? null
-          : (v) => setState(() => regConsent = v ?? false),
-      controlAffinity: ListTileControlAffinity.leading,
-      contentPadding: EdgeInsets.zero,
-      title: const Text(
-        'Согласен(на): магазин Dosmart хранит мои ФИО, дату рождения, отряд, '
-        'учреждение, баланс и покупки, чтобы вести мой личный кабинет. Родственник '
-        'увидит баланс и лимит, только если я сам дам ему код. Отозвать согласие '
-        'можно через сотрудника магазина.',
-        style: TextStyle(fontSize: 15),
-      ),
+    Row(
+      children: [
+        Checkbox(
+          value: regConsent,
+          onChanged: store.sending
+              ? null
+              : (v) => setState(() => regConsent = v ?? false),
+        ),
+        Expanded(
+          child: GestureDetector(
+            onTap: store.sending
+                ? null
+                : () => setState(() => regConsent = !regConsent),
+            child: const Text(
+              'Согласен на обработку моих данных',
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+        ),
+        TextButton(onPressed: showConsent, child: const Text('Подробнее')),
+      ],
     ),
     errorText(),
     const SizedBox(height: 12),
@@ -1347,7 +1323,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
               }
               if (!checkNewPin(accPin, accPin2)) return;
               if (!regConsent) {
-                snack('Отметьте согласие, чтобы зарегистрироваться.');
+                snack('Отметьте согласие.');
                 return;
               }
               final ok = await store.register({
@@ -1370,14 +1346,29 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     ),
     TextButton(
       onPressed: store.sending ? null : () => switchAccount('login'),
-      child: const Text('Я уже зарегистрирован — войти'),
-    ),
-    text(
-      'После регистрации сотрудник магазина проверит ваши данные и условия '
-      'содержания. До проверки покупки с баланса недоступны.',
-      size: 14,
+      child: const Text('Уже есть кабинет — войти'),
     ),
   ]);
+
+  void showConsent() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Согласие на обработку данных'),
+      content: const Text(
+        'Магазин Dosmart хранит ваши ФИО, дату рождения, отряд, учреждение, '
+        'счёт и покупки, чтобы вести личный кабинет. Сотрудник магазина '
+        'проверит данные до первой покупки. Отозвать согласие можно через '
+        'сотрудника магазина.',
+        style: TextStyle(fontSize: 16),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Понятно'),
+        ),
+      ],
+    ),
+  );
 
   Widget metric(String label, String value, {String? hint, Color? tint}) =>
       Expanded(
@@ -1467,7 +1458,9 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
           [
             profile.institution,
             if ((profile.squad ?? '').isNotEmpty) 'отряд ${profile.squad}',
-            if (profile.condition.isNotEmpty) '${profile.condition} условия',
+            if (profile.condition.isNotEmpty)
+              '${profile.condition} условия'
+                  '${profile.conditionNormMrp == null ? '' : ' (${profile.conditionNormMrp} МРП)'}',
           ].where((s) => s.isNotEmpty).join(' · '),
           size: 15,
         ),
@@ -1475,9 +1468,8 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
           const SizedBox(height: 12),
           panel(
             text(
-              'Сотрудник магазина ещё не проверил вашу регистрацию (условия '
-              'содержания и лимит). Покупки с баланса откроются после проверки. '
-              'Заказать через родственника можно уже сейчас.',
+              'Ждёт проверки сотрудником. Покупки со счёта откроются после '
+              'проверки, заказ через родственника — уже сейчас.',
               size: 15,
             ),
           ),
@@ -1488,7 +1480,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               metric(
-                'Баланс',
+                'Счёт',
                 money(profile.balanceMinor),
                 hint: 'Можно потратить в магазине',
                 tint: softGreen,
@@ -1526,7 +1518,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
           children: [
             action(
               Icons.account_balance_wallet_outlined,
-              'Купить с баланса',
+              'Купить со счёта',
               () {
                 setState(() {
                   walletMode = true;
@@ -1683,70 +1675,6 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
           ],
         ),
       ),
-      const SizedBox(height: 16),
-      panel(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            text('Код для родственников', size: 20, bold: true),
-            const SizedBox(height: 6),
-            text(
-              'Продиктуйте родственнику этот код и свою фамилию. На сайте '
-              'dos-mart.kz/family он увидит ваш баланс и лимит и сможет '
-              'попросить пополнение. Тратить ваши деньги по коду нельзя.',
-              size: 15,
-            ),
-            const SizedBox(height: 12),
-            if ((profile.familyCode ?? store.familyCode)
-                case final String code) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: softGreen,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  code,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 44,
-                    letterSpacing: 6,
-                    fontWeight: FontWeight.w700,
-                    color: ink,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              text(
-                'Код всегда можно посмотреть здесь снова. Новый код отменит старый.',
-                size: 13,
-              ),
-            ] else
-              text('Код ещё не выдан.', size: 15),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: store.sending ? null : store.issueFamilyCode,
-                  icon: const Icon(Icons.key),
-                  label: Text(
-                    profile.familyCodeActive
-                        ? 'Выдать новый код'
-                        : 'Получить код',
-                  ),
-                ),
-                if (profile.familyCodeActive)
-                  OutlinedButton(
-                    onPressed: store.sending ? null : store.disableFamilyCode,
-                    child: const Text('Отключить код'),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
       const SizedBox(height: 20),
       panel(
         Column(
@@ -1819,7 +1747,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
             if (setRecovery == 'question')
               questionFields(newAnswer)
             else if (!profile.birthDateSet)
-              birthDateFields(setDay, setMonth, setYear),
+              dateField(setDay),
             pinField(setCurrent, 'Текущий пароль'),
             const SizedBox(height: 8),
             FilledButton(
@@ -1839,7 +1767,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
                         body['question'] = setQuestion;
                         body['answer'] = newAnswer.text.trim();
                       } else if (!profile.birthDateSet) {
-                        final date = birthDate(setDay, setMonth, setYear);
+                        final date = birthDate(setDay);
                         if (date == null) {
                           snack('Проверьте дату рождения.');
                           return;
@@ -1906,7 +1834,7 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
     if (receipt != null) {
       return centered([
         const Icon(Icons.check_circle_outline, size: 80, color: ink),
-        text('Заказ оплачен с баланса', size: 30, bold: true),
+        text('Заказ оплачен со счёта', size: 30, bold: true),
         text('Номер: ${receipt.orderNumber}'),
         text('Списано с доставкой: ${money(receipt.totalMinor)}'),
         const SizedBox(height: 24),
@@ -2020,4 +1948,36 @@ class _ShopHomeState extends State<ShopHome> with WidgetsBindingObserver {
       ),
     ),
   );
+}
+
+/// Маска даты: оставляет до 8 цифр и ставит точки — ДД.ММ.ГГГГ.
+class DateMaskFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    // Стёрли точку — стираем и цифру перед ней.
+    if (newValue.text.length < oldValue.text.length &&
+        oldValue.text.endsWith('.') &&
+        digits == oldValue.text.replaceAll(RegExp(r'\D'), '')) {
+      digits = digits.substring(0, digits.length - 1);
+    }
+    if (digits.length > 8) digits = digits.substring(0, 8);
+    final out = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      out.write(digits[i]);
+      if ((i == 1 || i == 3) &&
+          (i < digits.length - 1 ||
+              newValue.text.length > oldValue.text.length)) {
+        out.write('.');
+      }
+    }
+    final text = out.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
 }

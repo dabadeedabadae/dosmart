@@ -18,9 +18,10 @@
     <div>
         <span class="limits-kicker">Карточка получателя</span>
         <h1 class="page-title">{{ $prisoner->full_name }}</h1>
-        <p>{{ $prisoner->institution->name }} · отряд {{ $prisoner->squad ?? 'не указан' }} · {{ \App\Models\Prisoner::CONDITIONS[$prisoner->condition] }} условия · ИИН {{ $prisoner->maskedIin() }}</p>
+        <p>{{ $prisoner->institution->name }} · отряд {{ $prisoner->squad ?? 'не указан' }} · {{ app(\App\Services\PrisonerAccounts::class)->conditionLabel($prisoner) }} · ИИН {{ $prisoner->maskedIin() }}</p>
         <div class="limits-chips">
-            @if($prisoner->needsReview())<span class="limits-chip limits-chip-warn">Зарегистрировался сам на планшете — проверьте ФИО, условия содержания и режим лимита (работает — «Без лимита»)</span>@endif
+            @if($prisoner->needsReview() && $prisoner->recovered_at && $prisoner->recovered_at->gte($prisoner->registered_at ?? $prisoner->recovered_at))<span class="limits-chip limits-chip-warn">Пароль восстановлен на планшете {{ $prisoner->recovered_at->timezone('Asia/Almaty')->format('d.m.Y H:i') }} — покупки закрыты. Убедитесь лично, что пароль менял сам владелец, затем «Проверено»</span>
+            @elseif($prisoner->needsReview())<span class="limits-chip limits-chip-warn">Зарегистрировался сам на планшете — проверьте ФИО, условия содержания и режим лимита (работает — «Без лимита»)</span>@endif
             <span class="limits-chip">{{ \App\Models\Prisoner::SPENDING_MODES[$prisoner->spending_mode ?? 'unlimited'] }}</span>
             @if($prisoner->isRegistered())
                 <span class="limits-chip">Зарегистрирован {{ $prisoner->registered_at->timezone('Asia/Almaty')->format('d.m.Y') }} · {{ $prisoner->authMethod() === 'pin' ? 'пароль' : 'контрольный вопрос' }}</span>
@@ -49,9 +50,9 @@
     </div>
 </header>
 
-<section class="limits-grid" aria-label="Баланс и лимиты">
+<section class="limits-grid" aria-label="Счёт и лимиты">
     <div class="limits-metric limits-metric-main">
-        <span>Баланс Dosmart</span>
+        <span>Счёт Dosmart</span>
         <strong>{{ $tenge($profile['balance_minor']) }}</strong>
         <small>Доступно для покупок на планшете</small>
     </div>
@@ -81,8 +82,8 @@
 
 <div class="limits-columns">
     <section class="card limits-panel">
-        <h2 class="limits-heading">Пополнить баланс</h2>
-        <p class="limits-muted">Осуждённый подал заявление в администрации, деньги пришли на счёт магазина — внесите их сюда. Баланс увеличится сразу.</p>
+        <h2 class="limits-heading">Пополнить счёт</h2>
+        <p class="limits-muted">Осуждённый подал заявление в администрации, деньги пришли на счёт магазина — внесите их сюда. Сумма на счёте осуждённого увеличится сразу.</p>
         <form method="post" action="{{ route('admin.prisoners.deposit', $prisoner) }}" class="limits-form">
             @csrf
             <div class="limits-fields">
@@ -92,7 +93,7 @@
                 <div class="form-group"><label>№ платежа / выписки <input class="form-control" name="payment_reference" maxlength="100" required value="{{ old('payment_reference') }}" placeholder="Из банковской выписки"></label></div>
             </div>
             <label class="limits-check"><input type="checkbox" name="payment_verified" value="1" required> Поступление на счёт магазина и сумма сверены с выпиской</label>
-            <button class="btn btn-primary">Зачислить на баланс</button>
+            <button class="btn btn-primary">Зачислить на счёт</button>
         </form>
         <details class="limits-more">
             <summary>Деньги ещё не пришли — только зарегистрировать заявление</summary>
@@ -109,7 +110,7 @@
     </section>
 
     <section class="card limits-panel">
-        <h2 class="limits-heading">Движение по балансу</h2>
+        <h2 class="limits-heading">Движение по счёту</h2>
         <ul class="limits-ledger">
             @forelse($history as $row)
                 <li>
@@ -185,7 +186,7 @@
         @forelse($orders as $order)
             <tr>
                 <td><a href="{{ route('admin.orders.show', $order) }}">{{ $order->order_number }}</a><br><small>{{ $order->created_at->timezone('Asia/Almaty')->format('d.m.Y H:i') }}</small></td>
-                <td>{{ $order->prisoner_order_type === 'balance' ? 'Покупка с баланса' : 'Передача от родственника' }}</td>
+                <td>{{ $order->prisoner_order_type === 'balance' ? 'Покупка со счёта' : 'Передача от родственника' }}</td>
                 <td>{{ $order->status_label }}@if($order->parcel_state)<br><small>{{ ['reserved' => 'Резерв нормы', 'delivered' => 'Учтена '.$order->delivered_at?->timezone('Asia/Almaty')->format('d.m.Y'), 'released' => 'Резерв снят'][$order->parcel_state] }}</small>@endif</td>
                 <td>{{ number_format($order->total, 2, ',', ' ') }} ₸
                     @if((float) $order->refund_amount > 0)<br><small>Возврат {{ number_format($order->refund_amount, 2, ',', ' ') }} ₸</small>@endif
@@ -212,11 +213,6 @@
             <button class="btn btn-primary">Сохранить</button>
         </form>
     </details>
-    @if($prisoner->institution->requiresParcelCode())
-        <div class="form-group" style="margin-top:16px"><label>Код для передач от родственников
-            <input class="form-control" readonly value="{{ $prisoner->parcel_code }}" onclick="this.select()">
-        </label><small class="limits-muted">Код сообщают родственнику для оформления передачи на сайте. На планшете человек входит по ФИО, отряду и своему паролю.</small></div>
-    @endif
 </section>
 </div>
 @endsection

@@ -65,7 +65,7 @@ p { margin:5px 0; }
 <div class="signature">
 @unless($publicReceipt ?? false)
 <p><strong>Кому заказали (ФИО):</strong><br>{{ $order->prisoner_name ?: '____________________________' }}</p>
-<p><strong>От кого (ФИО):</strong><br>{{ $order->prisoner_order_type === 'balance' ? 'Сам получатель — оплата с баланса Dosmart' : ($order->relative_name ?: '____________________________') }}</p>
+<p><strong>От кого (ФИО):</strong><br>{{ $order->prisoner_order_type === 'balance' ? 'Сам получатель — оплата со счёта Dosmart' : ($order->relative_name ?: '____________________________') }}</p>
 @endunless
 <strong>ПОЛУЧИЛ</strong> <span class="signature-line"></span><p class="small center">подпись получателя</p></div>
 </main>

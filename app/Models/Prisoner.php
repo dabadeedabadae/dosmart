@@ -113,26 +113,6 @@ class Prisoner extends Model
         $this->pin_hash = Hash::make($pin);
     }
 
-    /**
-     * Слабый пароль: одинаковые цифры, подряд по возрастанию или убыванию,
-     * или дата рождения в любом из привычных видов (ДДММГГ, ГГММДД, ММДДГГ, ДДММ+год).
-     */
-    public static function weakPin(string $pin, ?\DateTimeInterface $birthDate = null): bool
-    {
-        if (preg_match('/^(\d)\1{5}$/', $pin) || str_contains('0123456789012', $pin) || str_contains('9876543210987', $pin)) {
-            return true;
-        }
-        if ($birthDate) {
-            $d = $birthDate->format('d');
-            $m = $birthDate->format('m');
-            $y = $birthDate->format('y');
-            $yyyy = $birthDate->format('Y');
-
-            return in_array($pin, [$d.$m.$y, $y.$m.$d, $m.$d.$y, $d.$m.substr($yyyy, 0, 2), $yyyy.$m, $m.$yyyy, $yyyy.$d], true);
-        }
-
-        return false;
-    }
 
     /** Карточка, заведённая самим человеком на планшете, ждёт проверки сотрудником. */
     public function needsReview(): bool
@@ -141,6 +121,15 @@ class Prisoner extends Model
     }
 
     /** Зарегистрированная карточка в учреждении по точным ФИО и дате рождения. */
+    /** Все зарегистрированные в учреждении с таким ФИО (без учёта регистра и лишних пробелов). */
+    public static function registeredByName(int $institutionId, string $fullName): \Illuminate\Support\Collection
+    {
+        $name = self::normalizeName($fullName);
+
+        return self::with('institution')->where('institution_id', $institutionId)->whereNotNull('registered_at')->get()
+            ->filter(fn (self $prisoner) => self::normalizeName($prisoner->full_name) === $name)->values();
+    }
+
     public static function findRegistered(int $institutionId, string $fullName, string $birthDate): ?self
     {
         $name = self::normalizeName($fullName);

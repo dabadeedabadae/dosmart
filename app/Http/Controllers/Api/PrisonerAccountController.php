@@ -76,14 +76,8 @@ class PrisonerAccountController extends Controller
             'id' => $prisoner->id,
             'full_name' => $prisoner->full_name,
             'squad' => $prisoner->squad,
-            'registered' => $prisoner->isRegistered(),
-            'method' => $prisoner->isRegistered() ? $prisoner->authMethod() : null,
-            'question' => $prisoner->isRegistered() && $prisoner->authMethod() === 'question'
-                ? Prisoner::SECURITY_QUESTIONS[$prisoner->security_question] : null,
-            // Как восстановить забытый пароль: по дате рождения или ответу на вопрос.
-            'recovery' => $prisoner->isRegistered() ? $prisoner->recoveryMethod() : null,
-            'recovery_question' => $prisoner->isRegistered() && $prisoner->recoveryMethod() === 'question'
-                ? Prisoner::SECURITY_QUESTIONS[$prisoner->security_question] : null,
+            // Есть ли у человека кабинет и как он восстанавливает пароль, не раскрываем:
+            // по этим признакам можно подбирать дату рождения и захватывать чужой кабинет.
         ])->values();
 
         return $this->noStore(response()->json(['matches' => $matches]));
@@ -102,7 +96,6 @@ class PrisonerAccountController extends Controller
             'birth_date' => $this->birthDateRules(),
             ...$this->pinRules(),
         ], self::MESSAGES);
-        $this->rejectWeakPin($data['pin'], $data['birth_date']);
         $candidate = $this->candidate($request, $identity, (int) $data['prisoner_id']);
 
         $prisoner = DB::transaction(function () use ($candidate, $data, $squad) {
@@ -128,11 +121,20 @@ class PrisonerAccountController extends Controller
         if (! $request->has('prisoner_id')) {
             $data = $request->validate([
                 'full_name' => 'required|string|min:3|max:255',
-                'birth_date' => ['required', 'date_format:Y-m-d'],
+                'birth_date' => ['nullable', 'date_format:Y-m-d'],
                 'secret' => 'required|string|max:100',
             ], self::MESSAGES);
-            $candidate = Prisoner::findRegistered($this->institutionId($request), $data['full_name'], $data['birth_date']);
-            abort_unless($candidate && $candidate->institution->is_active, 401, 'Неверные ФИО, дата рождения или пароль.');
+            // Обычно хватает ФИО и пароля. Дату рождения спрашиваем, только если в учреждении есть полный тёзка.
+            if (empty($data['birth_date'])) {
+                $same = Prisoner::registeredByName($this->institutionId($request), $data['full_name']);
+                abort_if($same->count() > 1, 409, 'В учреждении есть человек с такими же ФИО. Укажите дату рождения.');
+                $candidate = $same->first();
+            } else {
+                $candidate = Prisoner::findRegistered($this->institutionId($request), $data['full_name'], $data['birth_date']);
+            }
+            // Один и тот же ответ на неверные ФИО, дату и пароль: по разнице ответов нельзя подобрать дату рождения.
+            $wrong = empty($data['birth_date']) ? 'Неверные ФИО или пароль.' : 'Неверные ФИО, дата рождения или пароль.';
+            abort_unless($candidate && $candidate->institution->is_active, 401, $wrong);
             if ($candidate->isLocked()) {
                 return $this->locked($candidate);
             }
@@ -140,7 +142,7 @@ class PrisonerAccountController extends Controller
             if ($prisoner->isLocked()) {
                 return $this->locked($prisoner);
             }
-            abort_if($left !== null, 401, 'Неверный пароль. Осталось попыток: '.$left.'.');
+            abort_if($left !== null, 401, $wrong);
 
             return $this->session($prisoner, $accounts);
         }
@@ -202,7 +204,6 @@ class PrisonerAccountController extends Controller
     {
         $prisoner = $this->account($request);
         $data = $request->validate(['current' => 'required|string|max:100', ...$this->pinRules()], self::MESSAGES);
-        $this->rejectWeakPin($data['pin'], $prisoner->birth_date?->format('Y-m-d'));
         $prisoner = $this->checkCurrent($prisoner, $data['current']);
         if ($prisoner instanceof JsonResponse) {
             return $prisoner;
@@ -217,7 +218,7 @@ class PrisonerAccountController extends Controller
      * Регистрация без поиска по списку: ФИО, условия содержания, отряд, дата рождения, пароль.
      * Если в учреждении есть одна незарегистрированная карточка с точно такими ФИО — регистрация
      * привязывается к ней. Иначе создаётся новая карточка, она ждёт проверки сотрудником
-     * (условия содержания и режим лимита). До проверки покупки с баланса недоступны.
+     * (условия содержания и режим лимита). До проверки покупки со счёта недоступны.
      */
     private function selfRegister(Request $request, PrisonerAccounts $accounts)
     {
@@ -234,7 +235,6 @@ class PrisonerAccountController extends Controller
             'squad.required' => 'Укажите номер отряда.',
             'condition.required' => 'Выберите условия содержания.',
         ]);
-        $this->rejectWeakPin($data['pin'], $data['birth_date']);
         $institutionId = $this->institutionId($request);
         $name = trim((string) preg_replace('/\s+/u', ' ', $data['full_name']));
 
@@ -242,8 +242,9 @@ class PrisonerAccountController extends Controller
             // Блокируем учреждение, чтобы два планшета не создали две карточки одному человеку.
             $institution = Institution::whereKey($institutionId)->lockForUpdate()->firstOrFail();
             abort_unless($institution->is_active, 403, 'Учреждение сейчас не обслуживается.');
-            abort_if(Prisoner::findRegistered($institutionId, $name, $data['birth_date']), 409,
-                'Вы уже зарегистрированы. Войдите по ФИО, дате рождения и паролю.');
+            // Проверяем только ФИО, без даты рождения: иначе ответ подсказывал бы, верна ли дата.
+            abort_if(Prisoner::registeredByName($institutionId, $name)->isNotEmpty(), 409,
+                'Человек с такими ФИО уже зарегистрирован. Войдите или обратитесь к сотруднику магазина.');
             $sameName = Prisoner::where('institution_id', $institutionId)->whereNull('registered_at')->lockForUpdate()->get()
                 ->filter(fn (Prisoner $p) => Prisoner::normalizeName($p->full_name) === Prisoner::normalizeName($name));
             abort_if($sameName->count() > 1, 409, 'В списке несколько человек с такими ФИО. Обратитесь к сотруднику магазина.');
@@ -257,8 +258,9 @@ class PrisonerAccountController extends Controller
                 ]);
                 $prisoner->limit_started_on = now('Asia/Almaty')->startOfMonth()->toDateString();
                 $prisoner->reviewed_at = null;
-            } elseif ($prisoner->condition !== $data['condition']) {
-                // Условия в карточке от сотрудника не меняем, но просим перепроверить.
+            } else {
+                // Карточку завёл сотрудник, и на ней могут быть деньги. Кто угодно мог назвать эти ФИО,
+                // поэтому до проверки сотрудником покупки закрыты. Условия в карточке не меняем.
                 $prisoner->reviewed_at = null;
             }
             $prisoner->setCredentials('none', null, null, null);
@@ -290,7 +292,6 @@ class PrisonerAccountController extends Controller
         ], self::MESSAGES);
         $candidate = Prisoner::findRegistered($this->institutionId($request), $data['full_name'], $data['birth_date']);
         abort_unless($candidate && $candidate->institution->is_active, 404, 'Не нашли регистрацию с такими ФИО и датой рождения. Обратитесь к сотруднику магазина.');
-        $this->rejectWeakPin($data['pin'], $data['birth_date']);
 
         [$prisoner, $result] = DB::transaction(function () use ($candidate, $data) {
             $prisoner = Prisoner::with('institution')->whereKey($candidate->id)->lockForUpdate()->firstOrFail();
@@ -306,7 +307,9 @@ class PrisonerAccountController extends Controller
             $ok = $prisoner->recoveryMethod() !== 'question' || $prisoner->checkSecurityAnswer((string) ($data['proof'] ?? ''));
             if ($ok) {
                 $prisoner->setPin($data['pin']);
-                $prisoner->forceFill(['recovered_at' => now(), 'failed_logins' => 0, 'locked_until' => null]);
+                // Дату рождения могут знать и другие: покупки закрыты, пока сотрудник не подтвердит,
+                // что пароль сменил сам владелец. Старые сеансы перестают действовать (recovered_at).
+                $prisoner->forceFill(['recovered_at' => now(), 'reviewed_at' => null, 'failed_logins' => 0, 'locked_until' => null]);
             }
             $prisoner->save();
 
@@ -377,7 +380,6 @@ class PrisonerAccountController extends Controller
         $candidate = $this->candidate($request, $identity, (int) $data['prisoner_id']);
         abort_unless($candidate->isRegistered(), 409, 'Сначала зарегистрируйтесь.');
         abort_unless($candidate->recoveryMethod(), 409, 'Восстановить пароль можно только через сотрудника магазина.');
-        $this->rejectWeakPin($data['pin'], $candidate->birth_date?->format('Y-m-d'));
 
         [$prisoner, $ok] = DB::transaction(function () use ($candidate, $data) {
             $prisoner = Prisoner::with('institution')->whereKey($candidate->id)->lockForUpdate()->firstOrFail();
@@ -386,7 +388,10 @@ class PrisonerAccountController extends Controller
             }
             if ($prisoner->checkRecovery($data['proof'])) {
                 $prisoner->setPin($data['pin']);
-                $prisoner->forceFill(['recovery_failed' => 0, 'recovery_locked_until' => null])->save();
+                $prisoner->forceFill([
+                    'recovery_failed' => 0, 'recovery_locked_until' => null,
+                    'recovered_at' => now(), 'reviewed_at' => null,
+                ])->save();
 
                 return [$prisoner, true];
             }
@@ -435,12 +440,6 @@ class PrisonerAccountController extends Controller
         return ['required', 'date_format:Y-m-d', 'after:1920-01-01', 'before:'.now('Asia/Almaty')->subYears(14)->toDateString()];
     }
 
-    private function rejectWeakPin(string $pin, ?string $birthDate): void
-    {
-        if (Prisoner::weakPin($pin, $birthDate ? Carbon::parse($birthDate) : null)) {
-            throw ValidationException::withMessages(['pin' => 'Слишком простой пароль. Не используйте одинаковые цифры, цифры подряд и дату рождения.']);
-        }
-    }
 
     /** Проверка текущего пароля в настройках: ошибки считаются так же, как при входе. */
     private function checkCurrent(Prisoner $prisoner, string $current): Prisoner|JsonResponse
@@ -523,6 +522,8 @@ class PrisonerAccountController extends Controller
             'institution_id' => (int) $prisoner->institution_id, 'expires' => now()->addMinutes(15)->timestamp,
             // Сброс регистрации в админке завершает все открытые сеансы.
             'registered' => $prisoner->registered_at?->timestamp,
+            // Восстановление пароля завершает все сеансы, открытые до него.
+            'recovered' => $prisoner->recovered_at?->timestamp,
         ], JSON_THROW_ON_ERROR));
 
         return $this->noStore(response()->json(['token' => $token, 'profile' => $accounts->ownProfile($prisoner)]));
@@ -564,7 +565,8 @@ class PrisonerAccountController extends Controller
 
         return $prisoner && $prisoner->isRegistered() && $prisoner->institution->is_active
             && (int) $prisoner->institution_id === ($session['institution_id'] ?? null)
-            && $prisoner->registered_at->timestamp === ($session['registered'] ?? null) ? $prisoner : null;
+            && $prisoner->registered_at->timestamp === ($session['registered'] ?? null)
+            && $prisoner->recovered_at?->timestamp === ($session['recovered'] ?? null) ? $prisoner : null;
     }
 
     private function noStore($response)

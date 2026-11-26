@@ -8,7 +8,7 @@ use App\Services\PrisonerAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
-/** Родственник по коду из кабинета осуждённого видит баланс и лимит и просит пополнить баланс. */
+/** Родственник по коду из кабинета осуждённого видит счёт и лимит и просит пополнить счёт. */
 class FamilyController extends Controller
 {
     private const COOKIE = 'dosmart_family';

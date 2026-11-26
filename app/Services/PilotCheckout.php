@@ -97,7 +97,7 @@ class PilotCheckout
                 'delivery_type' => $data['delivery_type'], 'consented_at' => now(), 'consent_version' => config('pilot.consent_version'),
                 'status' => 'pending', 'payment_status' => 'unpaid',
             ]);
-            app(PrisonerAccounts::class)->reserveParcel($order, $institution, $data['parcel_code'] ?? null, $data['recipient_birth_date'] ?? null);
+            app(PrisonerAccounts::class)->reserveParcel($order, $institution);
             $order->items()->createMany($quote['items']);
             $order->statusHistory()->create(['status' => 'pending', 'comment' => 'Оформлен родственником. Согласие: '.config('pilot.consent_version')]);
             $draft->update(['order_id' => $order->id]);
