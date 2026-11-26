@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Institution;
 use App\Models\Order;
 use App\Models\OrderDraft;
+use App\Services\OrderChanges;
 use App\Services\PilotCheckout;
+use App\Services\PrisonerAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -14,10 +17,31 @@ class OrderController extends Controller
 {
     private array $statuses = ['new' => 'Новая заявка', 'pending' => 'Ожидает оплаты', 'paid' => 'Оплачен', 'checking' => 'На проверке', 'processing' => 'Собирается', 'delivering' => 'В доставке', 'delivered' => 'Доставлено', 'refunded' => 'Возврат', 'cancelled' => 'Отменён'];
 
+    private function listContext(Request $request): array
+    {
+        $input = $request->input('list', []);
+        if (! is_array($input)) {
+            return [];
+        }
+        $result = [];
+        if (is_string($input['q'] ?? null)) {
+            $result['q'] = mb_substr($input['q'], 0, 120);
+        }
+        if (is_string($input['status'] ?? null) && isset($this->statuses[$input['status']])) {
+            $result['status'] = $input['status'];
+        }
+        if (filter_var($input['page'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])) {
+            $result['page'] = (int) $input['page'];
+        }
+
+        return $result;
+    }
+
     public function index(Request $request)
     {
-        $orders = Order::withCount('items')->when($request->status, fn ($q) => $q->where('status', $request->status))
-            ->when($request->filled('q'), fn ($q) => $q->where('order_number', 'like', '%'.$request->string('q').'%'))->latest()->paginate(20);
+        $request->validate(['q' => 'nullable|string|max:120', 'status' => 'nullable|in:'.implode(',', array_keys($this->statuses)), 'page' => 'nullable|integer|min:1']);
+        $orders = Order::withCount(['items', 'changeRequests as pending_changes_count' => fn ($q) => $q->where('status', 'pending')])->when($request->status, fn ($q) => $q->where('status', $request->status))
+            ->when($request->filled('q'), fn ($q) => $q->where(fn ($search) => $search->where('order_number', 'like', '%'.$request->string('q').'%')->orWhere('display_number', 'like', '%'.$request->string('q').'%')))->latest()->paginate(20);
         $metrics = DB::table('pilot_events')->where('source', 'terminal')->selectRaw('event, count(*) as count')->groupBy('event')->pluck('count', 'event');
         $drafts = OrderDraft::whereNull('order_id')->where('expires_at', '>', now())->latest()->limit(20)->get();
 
@@ -28,23 +52,47 @@ class OrderController extends Controller
     {
         $order->load(['items', 'statusHistory']);
 
-        return view('admin.orders.show', ['order' => $order, 'statuses' => $this->statuses]);
+        return view('admin.orders.show', ['order' => $order, 'statuses' => $this->statuses, 'listContext' => $this->listContext(request())]);
     }
 
-    public function updateStatus(Request $request, Order $order, PilotCheckout $service)
+    public function receipt(Order $order)
+    {
+        $order->load('items');
+
+        return response()->view('admin.orders.receipt', compact('order'))
+            ->header('Cache-Control', 'private, no-store')
+            ->header('X-Robots-Tag', 'noindex, nofollow');
+    }
+
+    public function reviewChanges(Request $request, Order $order, int $change, OrderChanges $service)
+    {
+        $data = $request->validate(['decision' => 'required|in:approved,rejected', 'response' => 'nullable|string|max:500']);
+        $service->review($order, $change, $data, $request->user()->id);
+
+        return redirect()->route('admin.orders.show', ['order' => $order, 'list' => $this->listContext($request)])->with('success', 'Ответ на изменения сохранён.');
+    }
+
+    public function updateStatus(Request $request, Order $order, PilotCheckout $service, PrisonerAccounts $accounts)
     {
         $data = $request->validate([
             'status' => 'required|in:'.implode(',', array_keys($this->statuses)),
-            'delivery_type' => 'nullable|in:standard,urgent',
+            'delivery_type' => 'nullable|in:standard',
             'comment' => 'nullable|string|max:180',
             'payment_verified' => 'sometimes|accepted',
             'payment_reference' => 'nullable|string|max:100',
-            'refund_amount' => 'nullable|numeric|min:0.01',
+            'refund_amount' => 'nullable|numeric|min:0.01|max:99999999.99|decimal:0,2',
             'refund_verified' => 'sometimes|accepted',
+            'refund_includes_delivery' => 'sometimes|boolean',
         ]);
-        DB::transaction(function () use ($request, $order, $data, $service) {
+        DB::transaction(function () use ($request, $order, $data, $service, $accounts) {
             $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
             $next = $data['status'];
+            if (in_array($next, ['pending', 'paid'], true) && $order->changeRequests()->where('status', 'pending')->exists()) {
+                throw ValidationException::withMessages(['changes' => 'Сначала рассмотрите запрос изменений от родственника.']);
+            }
+            if ($next === 'cancelled') {
+                $order->changeRequests()->where('status', 'pending')->update(['status' => 'rejected', 'response' => 'Заявка отменена сотрудником.', 'reviewed_by' => $request->user()->id, 'reviewed_at' => now()]);
+            }
             if ($next === $order->status && $next !== 'refunded') {
                 return;
             }
@@ -59,11 +107,15 @@ class OrderController extends Controller
             }
             $changes = ['status' => $next];
             $comment = $data['comment'] ?? $this->statuses[$next];
+            if ($order->institution_id && in_array($next, ['pending', 'paid'], true) && ! $order->prisoner_order_type) {
+                $institution = Institution::whereKey($order->institution_id)->lockForUpdate()->firstOrFail();
+                $accounts->reserveParcel($order, $institution);
+            }
             if ($order->status === 'new' && $next === 'pending') {
                 if (empty($data['delivery_type'])) {
                     throw ValidationException::withMessages(['delivery_type' => 'Согласуйте с родственником и выберите доставку.']);
                 }
-                $fee = $data['delivery_type'] === 'urgent' ? 5000 : 3000;
+                $fee = (float) config('pilot.delivery_fee', 3000);
                 $changes += ['delivery_type' => $data['delivery_type'], 'delivery_fee' => $fee, 'total' => (float) $order->subtotal + $fee];
                 $comment .= ' · Доставка согласована, ссылка на оплату подготовлена';
             }
@@ -77,14 +129,19 @@ class OrderController extends Controller
             if ($next === 'refunded') {
                 $amount = (float) ($data['refund_amount'] ?? 0);
                 if (! $request->boolean('refund_verified') || empty($data['comment']) || $amount <= (float) $order->refund_amount || $amount > (float) $order->total) {
-                    throw ValidationException::withMessages(['refund_amount' => 'Сначала выполните возврат в Kaspi Pay. Укажите причину и общую возвращённую сумму: больше предыдущей и не больше суммы заказа.']);
+                    throw ValidationException::withMessages(['refund_amount' => 'Подтвердите возврат, укажите причину и общую возвращаемую сумму: больше предыдущей и не больше суммы заказа.']);
                 }
-                $changes += ['payment_status' => 'refunded', 'refund_amount' => $amount];
+                $withDelivery = $order->refund_includes_delivery || $request->boolean('refund_includes_delivery');
+                if ($withDelivery && $amount < (float) $order->delivery_fee) {
+                    throw ValidationException::withMessages(['refund_amount' => 'Сумма возврата меньше стоимости доставки. Снимите отметку «в том числе доставка» или проверьте сумму.']);
+                }
+                $changes += ['payment_status' => 'refunded', 'refund_amount' => $amount, 'refund_includes_delivery' => $withDelivery];
                 $comment .= ' · Возвращено всего: '.$amount.' ₸';
             }
             if ($next === 'delivered') {
                 $changes['delivered_at'] = now();
             }
+            $accounts->applyOrderStatus($order, $next, PrisonerAccounts::minor($data['refund_amount'] ?? 0));
             $order->update($changes);
             $order->statusHistory()->create(['status' => $next, 'comment' => mb_substr(($request->user()->username ?? 'admin').': '.$comment, 0, 255)]);
             if ($next === 'paid' && ($draft = OrderDraft::where('order_id', $order->id)->first())) {
@@ -92,6 +149,6 @@ class OrderController extends Controller
             }
         });
 
-        return redirect()->route('admin.orders.show', $order)->with('success', 'Статус обновлён.');
+        return redirect()->route('admin.orders.show', ['order' => $order, 'list' => $this->listContext($request)])->with('success', 'Статус обновлён.');
     }
 }

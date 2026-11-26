@@ -3,6 +3,7 @@ $productData = json_encode([
     'product_id'   => $product->id,
     'product_name' => $product->name,
     'price'        => (float) $product->price,
+    'unit'         => $product->unit,
 ]);
 @endphp
 <div class="product-card" data-product-id="{{ $product->id }}" data-product="{{ $productData }}">
@@ -14,7 +15,10 @@ $productData = json_encode([
         @if($product->unit)
         <div class="product-weight">{{ $product->unit }}</div>
         @endif
-        <div class="product-price">{{ number_format($product->price, 0, ',', ' ') }} ₸</div>
+        <div class="product-price">{{ number_format($product->price, (float) $product->price === (float) (int) $product->price ? 0 : 2, ',', ' ') }} ₸</div>
+        @if(filled($product->description))
+            <details><summary>О товаре</summary><p style="white-space:pre-line;overflow-wrap:anywhere">{{ $product->description }}</p></details>
+        @endif
     </div>
     @if($product->in_stock)
     <div class="product-footer">

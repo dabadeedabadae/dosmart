@@ -9,22 +9,28 @@ class CategoryController extends Controller
 {
     public function index()
     {
-        // withCount в одном запросе вместо N запросов COUNT в цикле
+        // Preserve the root response for existing clients; expose the full tree
+        // and descendant IDs so native clients can filter nested products.
         $categories = Category::active()
-            ->root()
-            ->withCount(['products as product_count' => fn($q) => $q->where('is_active', true)->where('in_stock', true)])
-            ->with(['children' => fn($q) => $q->where('is_active', true)])
-            ->orderBy('sort_order')
-            ->get();
+            ->withCount(['products as product_count' => fn ($q) => $q->where('is_active', true)->where('in_stock', true)])
+            ->orderBy('sort_order')->orderBy('name')->get();
+        $children = $categories->groupBy('parent_id');
+        $serialize = function (Category $category, array $ancestors = []) use (&$serialize, $children): array {
+            $ancestors[] = $category->id;
+            $nested = $children->get($category->id, collect())
+                ->reject(fn ($child) => in_array($child->id, $ancestors, true))
+                ->map(fn ($child) => $serialize($child, $ancestors))->values();
 
-        return response()->json($categories->map(fn($cat) => [
-            'id'                => $cat->id,
-            'name'              => $cat->name,
-            'name_kk'           => $cat->name_kk,
-            'icon'              => $cat->icon,
-            'color'             => $cat->color,
-            'has_subcategories' => $cat->children->isNotEmpty(),
-            'product_count'     => (int) $cat->product_count,
-        ]));
+            return [
+                'id' => $category->id, 'name' => $category->name,
+                'name_kk' => $category->name_kk, 'icon' => $category->icon, 'color' => $category->color,
+                'has_subcategories' => $nested->isNotEmpty(),
+                'product_count' => (int) $category->product_count + $nested->sum('product_count'),
+                'category_ids' => array_merge([$category->id], $nested->flatMap(fn ($child) => $child['category_ids'])->all()),
+                'children' => $nested->all(),
+            ];
+        };
+
+        return response()->json($categories->whereNull('parent_id')->map(fn ($category) => $serialize($category))->values());
     }
 }

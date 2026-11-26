@@ -3,6 +3,12 @@
     @if(isset($institution)) @method('PUT') @endif
 
     <div class="form-group">
+        <label for="institution-code" class="form-label">Код учреждения в номере заказа (01–99)</label>
+        <input id="institution-code" name="order_code" class="form-control" inputmode="numeric" pattern="(0[1-9]|[1-9][0-9])" maxlength="2" value="{{ old('order_code', $institution->order_code ?? '') }}" placeholder="07">
+        <small>Например, 07-26-10-483: учреждение, год, месяц, случайные цифры. После первого заказа код изменить нельзя. Без кода сохраняется прежняя нумерация.</small>
+        @error('order_code') <div class="form-error">{{ $message }}</div> @enderror
+    </div>
+    <div class="form-group">
         <label for="institution-name" class="form-label">Название <span style="color:var(--danger-text)">*</span></label>
         <input id="institution-name" type="text" name="name" class="form-control {{ $errors->has('name') ? 'is-error' : '' }}"
                value="{{ old('name', $institution->name ?? '') }}" required maxlength="255" placeholder="Например: АК-159/2">

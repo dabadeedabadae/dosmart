@@ -96,8 +96,8 @@ class TerminalSubmissionTest extends TestCase
         $url = '/admin/orders/'.$order->id.'/status';
         $this->patch($url, ['status' => 'paid', 'payment_verified' => 1, 'payment_reference' => 'id'])->assertSessionHasErrors('status');
         $this->patch($url, ['status' => 'pending'])->assertSessionHasErrors('delivery_type');
-        $this->patch($url, ['status' => 'pending', 'delivery_type' => 'urgent'])->assertRedirect();
-        $this->assertSame('6600.00', $order->fresh()->total);
+        $this->patch($url, ['status' => 'pending', 'delivery_type' => 'standard'])->assertRedirect();
+        $this->assertSame('4600.00', $order->fresh()->total);
         $this->get($payment)->assertOk()->assertSee('Оплатить через Kaspi');
         $this->get('/admin/orders/'.$order->id)->assertOk()->assertSee('Ссылка на оплату для родственника');
         $this->patch($url, ['status' => 'paid'])->assertSessionHasErrors('payment_verified');

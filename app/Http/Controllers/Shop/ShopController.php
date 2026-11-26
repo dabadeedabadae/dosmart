@@ -6,14 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Institution;
 use App\Models\Product;
+use Illuminate\Http\Request;
 
 class ShopController extends Controller
 {
-    public function index(\Illuminate\Http\Request $request)
+    public function index(Request $request)
     {
         $categories = Category::active()->root()
-            ->withCount(['products as product_count' => fn($q) => $q->where('is_active', true)->where('in_stock', true)])
-            ->with(['children' => fn($q) => $q->where('is_active', true)])
+            ->withCount(['products as product_count' => fn ($q) => $q->where('is_active', true)->where('in_stock', true)])
+            ->with(['children' => fn ($q) => $q->where('is_active', true)])
             ->orderBy('sort_order')
             ->get();
 
@@ -33,7 +34,7 @@ class ShopController extends Controller
     public function category(Category $category)
     {
         abort_unless($category->is_active, 404);
-        $products = Product::where('category_id', $category->id)
+        $products = Product::whereIn('category_id', $category->descendantIds())
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get();
@@ -42,7 +43,8 @@ class ShopController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        return view('shop.category', compact('category', 'products', 'categories'));
+        return view('shop.category', ['category' => $category, 'products' => $products, 'categories' => $categories,
+            'subcategories' => $category->children()->active()->get()]);
     }
 
     public function cart()

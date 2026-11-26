@@ -9,9 +9,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('css/shop.css') }}?v=20260929">
+    <link rel="stylesheet" href="{{ asset('css/checkout.css') }}?v=20261019">
 
 </head>
-<body>
+<body class="@yield('body-class')">
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 
 <header class="header">
@@ -22,10 +23,6 @@
         <span class="brand-caption">Для тех,<br>кто вам дорог</span>
         <div class="header-spacer"></div>
         <a class="header-catalog account-link" href="{{ route('shop.index') }}#catalog">Каталог</a>
-        @auth('customer')
-        <a class="account-link" href="{{ route('shop.orders') }}">Мои заказы</a>
-        <form method="post" action="{{ route('shop.logout') }}">@csrf<button class="account-link account-logout">Выйти</button></form>
-        @else<a class="account-link" href="{{ route('shop.login') }}">Войти</a><a class="account-link register-link" href="{{ route('shop.register') }}">Регистрация</a>@endauth
         <a href="{{ route('shop.cart') }}" class="cart-btn" id="cart-btn">
             <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
@@ -37,6 +34,7 @@
         </a>
     </div>
 </header>
+<div class="delivery-strip"><div class="container"><span>Доставка — <strong>{{ number_format((float) config('pilot.delivery_fee', 3000), 0, ',', ' ') }} ₸</strong></span><span>Обработка заявок: <strong>{{ config('pilot.service_hours') }}</strong> · UTC+5</span></div></div>
 
 <main class="container page" id="main-content">
     @yield('content')
@@ -44,8 +42,13 @@
 
 <footer class="store-footer"><div class="container">
     <div><a class="logo footer-logo" href="{{ route('shop.index') }}">@include('shop.partials.logo')</a><p>Обычные покупки. Важная забота.</p></div>
-    <div class="footer-links"><a href="{{ route('shop.index') }}">Каталог товаров</a><a href="{{ route('shop.orders') }}">Мои заказы</a></div>
-    <div class="footer-links"><a href="{{ route('privacy') }}">Обработка данных</a><a href="{{ route('admin.login') }}">Вход для сотрудников</a></div>
+    <div class="footer-links"><a href="{{ route('shop.index') }}">Каталог товаров</a></div>
+    <div class="footer-links">
+        @if(config('consumer.preview') || config('consumer.published'))
+            <a href="{{ route('shop.help') }}">{{ trans('consumer.title', locale: 'ru') }}</a>
+            <a lang="kk" href="{{ route('shop.help', ['lang' => 'kk']) }}">{{ trans('consumer.title', locale: 'kk') }}</a>
+        @endif
+        <a href="{{ route('privacy') }}">Обработка данных</a></div>
 </div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 

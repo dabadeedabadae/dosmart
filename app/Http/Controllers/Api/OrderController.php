@@ -129,7 +129,7 @@ class OrderController extends Controller
 
     public function show(string $orderNumber)
     {
-        $order = Order::with('items')->where('customer_id', request()->user('customer')->id)->where('order_number', $orderNumber)->firstOrFail();
+        $order = Order::with('items')->where('customer_id', request()->user('customer')->id)->where(fn ($q) => $q->where('order_number', $orderNumber)->orWhere('display_number', $orderNumber))->firstOrFail();
 
         return response()->json([
             'order_number'     => $order->order_number,

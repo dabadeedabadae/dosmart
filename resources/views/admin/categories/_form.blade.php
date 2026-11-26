@@ -4,6 +4,19 @@
     @if(isset($category)) @method('PUT') @endif
 
     <div class="form-group">
+        <label class="form-label" for="parent-category">Родительская категория</label>
+        <select id="parent-category" name="parent_id" class="form-control">
+            <option value="">Нет — основная категория</option>
+            @foreach(($parentCategories ?? $categories) as $parentOption)
+                @if(!isset($category) || !in_array($parentOption->id, $category->descendantIds()))
+                <option value="{{ $parentOption->id }}" @selected((string) old('parent_id', $category->parent_id ?? request('parent_id')) === (string) $parentOption->id)>{{ $parentOption->path_name }}</option>
+                @endif
+            @endforeach
+        </select>
+        <div class="form-hint">Выберите категорию, чтобы создать внутри неё подкатегорию. Товары можно добавлять на любом уровне.</div>
+        @error('parent_id')<div class="form-error">{{ $message }}</div>@enderror
+    </div>
+    <div class="form-group">
         <label class="form-label">Название (рус.) <span style="color:var(--danger-text)">*</span></label>
         <input type="text" name="name" class="form-control {{ $errors->has('name') ? 'is-error' : '' }}"
                value="{{ old('name', $category->name ?? '') }}" required

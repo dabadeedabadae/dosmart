@@ -16,7 +16,7 @@
     $editing = request('edit') ? $institutions->firstWhere('id', (int) request('edit')) : null;
 @endphp
 
-<div style="display:flex;gap:24px;align-items:flex-start">
+<div class="editor-columns" style="display:flex;gap:24px;align-items:flex-start">
     <div style="flex:0 0 auto;width:640px;max-width:100%">
         @if($institutions->isEmpty())
             <div class="card" style="padding:48px;text-align:center;color:var(--text-muted)">
@@ -30,7 +30,7 @@
                     <div style="flex:1;min-width:0">
                         <div class="cat-list-name">{{ $institution->name }}</div>
                         <div class="cat-list-count">
-                            {{ $institution->city }} · {{ $institution->orders_count }} заказов
+                            Код {{ $institution->order_code ?? 'не задан' }} · {{ $institution->city }} · {{ $institution->orders_count }} заказов
                             <span class="badge {{ $institution->is_active ? 'badge-success' : 'badge-neutral' }}">{{ $institution->is_active ? 'Активно' : 'Неактивно' }}</span>
                         </div>
                     </div>

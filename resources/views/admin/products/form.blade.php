@@ -4,7 +4,7 @@
 @section('content')
 <div class="page-header">
     <div style="display:flex;align-items:center;gap:12px">
-        <a href="{{ route('admin.products.index') }}" class="icon-btn">
+        <a href="{{ route('admin.products.index', $listContext) }}" class="icon-btn">
             <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="m15 18-6-6 6-6"/>
             </svg>
@@ -18,6 +18,9 @@
         <form method="POST" enctype="multipart/form-data"
               action="{{ isset($product) ? route('admin.products.update', $product) : route('admin.products.store') }}">
             @csrf
+            @foreach($listContext as $key => $value)
+                <input type="hidden" name="list[{{ $key }}]" value="{{ $value }}">
+            @endforeach
             @if(isset($product)) @method('PUT') @endif
 
             <div class="form-group">
@@ -35,7 +38,7 @@
                     @foreach($categories as $cat)
                         <option value="{{ $cat->id }}"
                             {{ old('category_id', $product->category_id ?? '') == $cat->id ? 'selected' : '' }}>
-                            {{ $cat->name }}
+                            {{ $cat->path_name }}
                         </option>
                     @endforeach
                 </select>
@@ -104,7 +107,7 @@
                 <button type="submit" class="btn btn-primary">
                     {{ isset($product) ? 'Сохранить изменения' : 'Добавить товар' }}
                 </button>
-                <a href="{{ route('admin.products.index') }}" class="btn btn-ghost">Отмена</a>
+                <a href="{{ route('admin.products.index', $listContext) }}" class="btn btn-ghost">Отмена</a>
             </div>
         </form>
     </div>

@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#ffffff">
     <title>@yield('title', 'Dosmart') — DOSMART Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -306,6 +307,7 @@
         .filter-select { min-width: 150px; }
     </style>
     @stack('head')
+    <link rel="stylesheet" href="{{ asset('css/admin-mobile.css') }}?v=20261120">
 </head>
 <body>
 
@@ -316,9 +318,10 @@
             <div class="logo-text-name">DOSMART</div>
             <div class="logo-text-sub">market · админка</div>
         </div>
+        <button type="button" class="admin-menu-toggle btn btn-ghost" aria-controls="admin-navigation" aria-expanded="true">Меню</button>
     </div>
 
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" id="admin-navigation" aria-label="Разделы админки">
         <a href="{{ route('admin.products.index') }}"
            class="nav-link {{ request()->routeIs('admin.products*') ? 'active' : '' }}">
             <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -350,6 +353,10 @@
             </svg>
             Заказы
         </a>
+        <a href="{{ route('admin.prisoners.index') }}" class="nav-link {{ request()->routeIs('admin.prisoners.*') ? 'active' : '' }}">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-14 5h4"/></svg>
+            Учёт лимитов
+        </a>
         <a href="{{ route('admin.report') }}"
            class="nav-link {{ request()->routeIs('admin.report') ? 'active' : '' }}">
             <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -374,7 +381,7 @@
                     <circle cx="12" cy="5"  r="1.5"/>
                     <circle cx="12" cy="12" r="1.5"/>
                     <circle cx="12" cy="19" r="1.5"/>
-                </svg>
+                </svg><span class="mobile-action-label">Выйти</span>
             </button>
         </form>
     </div>
@@ -392,6 +399,35 @@
     @yield('content')
 </main>
 
+@php($navCounts = rescue(fn () => [
+    'orders' => \App\Models\Order::where('status', 'new')->count(),
+    'requests' => \App\Models\DepositRequest::where('status', 'new')->count(),
+], ['orders' => 0, 'requests' => 0], false))
+{{-- Нижняя панель для телефона: самые частые разделы в один тап. На компьютере скрыта. --}}
+<nav class="admin-tabbar" aria-label="Быстрые разделы">
+    <a href="{{ route('admin.orders.index') }}" class="{{ request()->routeIs('admin.orders*') ? 'is-active' : '' }}" @if(request()->routeIs('admin.orders*')) aria-current="page" @endif>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>Заказы</span>@if($navCounts['orders'])<b class="admin-tabbar-count" aria-label="новых: {{ $navCounts['orders'] }}">{{ $navCounts['orders'] }}</b>@endif
+    </a>
+    <a href="{{ route('admin.prisoners.index') }}" class="{{ request()->routeIs('admin.prisoners.*') && ! request()->routeIs('admin.prisoners.requests*') ? 'is-active' : '' }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-14 5h4"/></svg>
+        <span>Лимиты</span>
+    </a>
+    <a href="{{ route('admin.prisoners.requests') }}" class="{{ request()->routeIs('admin.prisoners.requests*') ? 'is-active' : '' }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span>Заявки</span>@if($navCounts['requests'])<b class="admin-tabbar-count" aria-label="ждут: {{ $navCounts['requests'] }}">{{ $navCounts['requests'] }}</b>@endif
+    </a>
+    <a href="{{ route('admin.products.index') }}" class="{{ request()->routeIs('admin.products*') ? 'is-active' : '' }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+        <span>Товары</span>
+    </a>
+    <button type="button" class="admin-tabbar-more" aria-controls="admin-navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <span>Ещё</span>
+    </button>
+</nav>
+
 @stack('scripts')
+<script src="{{ asset('js/admin-mobile.js') }}?v=20261120" defer></script>
 </body>
 </html>

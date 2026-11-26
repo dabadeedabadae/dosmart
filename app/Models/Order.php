@@ -7,15 +7,19 @@ use Illuminate\Database\Eloquent\Model;
 class Order extends Model
 {
     protected $fillable = [
-        'order_number', 'customer_id', 'user_id', 'institution_id',
+        'order_number', 'display_number', 'customer_id', 'user_id', 'institution_id',
         'prisoner_name', 'squad_number', 'institution_name', 'contact_phone', 'relative_name',
         'subtotal', 'delivery_fee', 'total',
+        'prisoner_id', 'prisoner_order_type', 'parcel_state', 'parcel_year', 'purchase_request_id', 'purchase_hash',
         'status', 'payment_status', 'kaspi_transaction_id',
-        'payment_reported_at', 'notes', 'delivered_at', 'delivery_type', 'consented_at', 'consent_version', 'paid_at', 'refund_amount',
+        'payment_reported_at', 'notes', 'delivered_at', 'delivery_type', 'consented_at', 'consent_version', 'paid_at', 'refund_amount', 'refund_includes_delivery',
     ];
+
+    protected $hidden = ['prisoner_id', 'purchase_request_id', 'purchase_hash'];
 
     protected $casts = [
         'refund_amount' => 'decimal:2',
+        'refund_includes_delivery' => 'boolean',
         'paid_at' => 'datetime',
         'payment_reported_at' => 'datetime',
         'consented_at' => 'datetime',
@@ -24,6 +28,11 @@ class Order extends Model
         'total' => 'decimal:2',
         'delivered_at' => 'datetime',
     ];
+
+    public function getOrderNumberAttribute($value): string
+    {
+        return $this->attributes['display_number'] ?? $value;
+    }
 
     // Номер генерируется на основе ID уже после вставки — никакого race condition
     public static function generateOrderNumber(int $id): string
@@ -36,9 +45,19 @@ class Order extends Model
         return $this->hasOne(OrderDraft::class);
     }
 
+    public function changeRequests()
+    {
+        return $this->hasMany(OrderChangeRequest::class);
+    }
+
     public function items()
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function prisoner()
+    {
+        return $this->belongsTo(Prisoner::class);
     }
 
     public function institution()

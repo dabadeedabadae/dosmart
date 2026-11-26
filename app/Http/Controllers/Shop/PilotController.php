@@ -5,10 +5,15 @@ namespace App\Http\Controllers\Shop;
 use App\Http\Controllers\Controller;
 use App\Models\Institution;
 use App\Models\Order;
-use Illuminate\Support\Facades\DB;
 use App\Models\OrderDraft;
+use App\Models\Prisoner;
+use App\Models\Product;
+use App\Services\OrderChanges;
+use App\Services\OrderPaymentLink;
 use App\Services\PilotCheckout;
+use App\Services\PrisonerAccounts;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -40,7 +45,7 @@ class PilotController extends Controller
         if ($extra > 0) {
             $lines[] = '… и ещё '.$extra.' позиций';
         }
-        $text = "Корзина DoSmart\n".implode("\n", $lines)."\nТовары: ".number_format($quote['subtotal'], 2, ',', ' ')." ₸\nДоставка: 3 000 ₸ на следующий день или 5 000 ₸ срочно.\nОформить: ".$url."\nКод: ".$draft->code;
+        $text = "Корзина DoSmart\n".implode("\n", $lines)."\nТовары: ".number_format($quote['subtotal'], 2, ',', ' ')." ₸\nДоставка: 3 000 ₸ на следующий день.\nОформить: ".$url."\nКод: ".$draft->code;
 
         return response()->json(['code' => $draft->code, 'url' => $url, 'expires_at' => $draft->expires_at->toIso8601String(), 'subtotal' => $quote['subtotal'], 'chat_text' => $text], 201);
     }
@@ -86,6 +91,32 @@ class PilotController extends Controller
         return response()->view('shop.pilot-checkout', compact('draft', 'quote', 'institutions'))->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
     }
 
+    /**
+     * Лимит получателя для родственника, который собирает корзину: только остаток, без других данных.
+     * Работает, когда у учреждения заданы нормы передач.
+     */
+    public function recipientLimits(Request $request, string $code, PrisonerAccounts $accounts)
+    {
+        $draft = $this->draft($code);
+        abort_if($draft->order_id, 404);
+        $data = $request->validate([
+            'institution_id' => 'required|integer',
+            'prisoner_name' => 'required|string|min:3|max:255',
+        ]);
+        $institution = Institution::whereKey($data['institution_id'])->where('is_active', true)->first();
+        if (! $institution || ! $institution->requiresParcelCode()) {
+            return response()->json(['limited' => false])->header('Cache-Control', 'private, no-store');
+        }
+        $found = $accounts->recipientByName($institution->id, $data['prisoner_name']);
+        if ($found->count() !== 1) {
+            return response()->json(['limited' => true, 'found' => false, 'namesakes' => $found->count() > 1])->header('Cache-Control', 'private, no-store');
+        }
+        $prisoner = Prisoner::with('institution')->findOrFail($found->first()->id);
+
+        return response()->json(['limited' => true, 'found' => true] + $accounts->recipientLimit($prisoner))
+            ->header('Cache-Control', 'private, no-store');
+    }
+
     public function checkout(Request $request, string $code, PilotCheckout $service)
     {
         $draft = $this->draft($code);
@@ -96,25 +127,35 @@ class PilotController extends Controller
         $phone = preg_replace('/[\s()+-]/', '', $request->input('contact_phone'));
         if (strlen($phone) === 11 && str_starts_with($phone, '8')) {
             $phone = '7'.substr($phone, 1);
+        } elseif (strlen($phone) === 10) {
+            $phone = '7'.$phone;
         }
         $request->merge(['contact_phone' => '+'.$phone]);
         $data = $request->validate([
+            'squad_number' => 'nullable|string|max:50',
             'prisoner_name' => 'required|string|max:255',
+            'relative_name' => 'required|string|min:3|max:255',
             'institution_id' => ['required', 'integer', Rule::exists('institutions', 'id')->where('is_active', true)],
-            'contact_phone' => ['required', 'string', 'regex:/^\+[1-9][0-9]{9,14}$/'],
-            'delivery_type' => 'required|in:standard,urgent', 'consent' => 'accepted', 'expected_total' => 'required|numeric|min:0',
-        ], ['consent.accepted' => 'Подтвердите согласие на обработку данных.', 'contact_phone.regex' => 'Укажите номер WhatsApp с кодом страны.']);
+            'contact_phone' => ['required', 'string', 'regex:/^\+7[0-9]{10}$/'],
+            'delivery_type' => 'required|in:standard', 'consent' => 'accepted', 'expected_total' => 'required|numeric|min:0',
+        ], ['consent.accepted' => 'Подтвердите согласие на обработку данных.', 'contact_phone.regex' => 'Укажите номер WhatsApp в формате +7 705 621 8748.', 'relative_name.required' => 'Укажите ваши ФИО — они будут в чеке как отправитель.']);
         $service->checkout($draft, $data, $request->user('customer')?->id);
 
         return redirect()->route('pilot.payment', $draft->code);
     }
 
-    public function reportPayment(string $code)
+    public function reportPayment(Request $request, string $code)
     {
         $draft = $this->draft($code);
         abort_unless($draft->order_id, 404);
-        DB::transaction(function () use ($draft) {
+        DB::transaction(function () use ($draft, $request) {
             $order = Order::whereKey($draft->order_id)->lockForUpdate()->firstOrFail();
+            if ($order->changeRequests()->where('status', 'pending')->exists()) {
+                throw ValidationException::withMessages(['changes' => 'Сначала дождитесь согласования изменений.']);
+            }
+            if ($request->filled('revision') && ! hash_equals(app(OrderChanges::class)->revision($order), (string) $request->input('revision'))) {
+                throw ValidationException::withMessages(['changes' => 'Заявка изменилась. Проверьте актуальную сумму и статус.']);
+            }
             // A customer's report never confirms a payment or changes its amount.
             if ($order->status !== 'pending' || $order->payment_reported_at) {
                 return;
@@ -129,33 +170,77 @@ class PilotController extends Controller
         return redirect()->route('pilot.payment', $draft->code);
     }
 
-    public function status(string $code)
+    public function requestChanges(Request $request, string $code, OrderChanges $changes)
     {
         $draft = $this->draft($code);
         abort_unless($draft->order_id, 404);
-        $order = $draft->order;
-        return response()->json([
-            'status' => $order->status,
-            'label' => $order->customer_status_label,
-            'revision' => hash('sha256', json_encode([
-                $order->status, $order->payment_status, $order->payment_reported_at,
-                $order->total, $order->refund_amount, $order->delivery_type,
-            ])),
-        ])->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
+        $data = $request->validate([
+            'revision' => 'required|string|size:64',
+            'items' => 'required|array|min:1|max:100',
+            'items.*.id' => 'required|integer|distinct',
+            'items.*.quantity' => 'required|integer|min:0|max:1000',
+            'additions' => 'sometimes|array|max:100',
+            'additions.*.product_id' => 'required|integer|distinct',
+            'additions.*.quantity' => 'required|integer|min:1|max:1000',
+            'additions.*.price' => 'required|numeric|min:0.01',
+            'comment' => 'nullable|string|max:1000',
+        ]);
+        $changes->request($draft->order, $data);
+
+        return redirect()->route('pilot.payment', $draft->code)->with('success', 'Запрос изменений отправлен сотруднику.');
+    }
+
+    private function pageData(Order $order): array
+    {
+        $order->load(['items.product', 'changeRequests', 'statusHistory']);
+        $links = app(OrderPaymentLink::class);
+        $kaspiUrl = $links->forOrder($order);
+        $replacement = $links->replacement($order);
+        $revision = app(OrderChanges::class)->revision($order);
+        $pendingChange = $order->changeRequests->where('status', 'pending')->first();
+
+        return ['order' => $order, 'kaspiUrl' => $kaspiUrl,
+            'catalogProducts' => app(OrderChanges::class)->editable($order) && ! $pendingChange
+                ? Product::active()->with('category')->whereNotIn('id', $order->items->pluck('product_id')->filter())->orderBy('name')->get() : collect(),
+            'whatsapp' => preg_replace('/\D/', '', (string) config('pilot.whatsapp')),
+            'revision' => $revision,
+            'screenRevision' => $replacement ? hash('sha256', $revision.'|'.$replacement) : $revision,
+            'paymentLinkChanged' => $replacement !== '',
+            'pendingChange' => $pendingChange,
+            'editable' => app(OrderChanges::class)->editable($order) && ! $pendingChange,
+        ];
+    }
+
+    public function status(Request $request, string $code)
+    {
+        $draft = $this->draft($code);
+        abort_unless($draft->order_id, 404);
+        $data = $this->pageData($draft->order);
+        $result = ['status' => $draft->order->status, 'label' => $data['pendingChange'] ? 'Согласование изменений' : $draft->order->customer_status_label, 'revision' => $data['screenRevision']];
+        if ($request->has('revision') && $request->input('revision') !== $data['screenRevision']) {
+            $result['html'] = view('shop.partials.order-details', $data)->render();
+        }
+
+        return response()->json($result)->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
+    }
+
+    public function receipt(string $code)
+    {
+        $draft = $this->draft($code);
+        abort_unless($draft->order_id, 404);
+        $order = $draft->order->load('items');
+
+        return response()->view('admin.orders.receipt', ['order' => $order, 'publicReceipt' => true])
+            ->header('Cache-Control', 'private, no-store')->header('Referrer-Policy', 'no-referrer')
+            ->header('X-Robots-Tag', 'noindex, nofollow');
     }
 
     public function payment(string $code)
     {
         $draft = $this->draft($code);
         abort_unless($draft->order_id, 404);
-        $order = $draft->order;
-        // The shared link displays payment details only, never the recipient or WhatsApp number.
-        $kaspiUrl = (string) config('pilot.kaspi_url');
-        if (! filter_var($kaspiUrl, FILTER_VALIDATE_URL) || parse_url($kaspiUrl, PHP_URL_SCHEME) !== 'https') {
-            $kaspiUrl = '';
-        }
-        $whatsapp = preg_replace('/\D/', '', (string) config('pilot.whatsapp'));
 
-        return response()->view('shop.pilot-payment', ['order' => $order, 'kaspiUrl' => $kaspiUrl, 'whatsapp' => $whatsapp, 'revision' => hash('sha256', json_encode([$order->status, $order->payment_status, $order->payment_reported_at, $order->total, $order->refund_amount, $order->delivery_type]))])->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
+        return response()->view('shop.pilot-payment', $this->pageData($draft->order))
+            ->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer')->header('X-Robots-Tag', 'noindex');
     }
 }

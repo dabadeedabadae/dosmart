@@ -10,6 +10,13 @@ class Product extends Model
 
     protected $casts = ['price' => 'decimal:2', 'in_stock' => 'boolean', 'is_active' => 'boolean'];
 
+    public function getImageUrlAttribute(?string $value): ?string
+    {
+        if (! $value) return null;
+        if (preg_match('~^https?://~i', $value)) return $value;
+        return rtrim(config('app.url'), '/').'/'.ltrim($value, '/');
+    }
+
     public function category()
     {
         return $this->belongsTo(Category::class);

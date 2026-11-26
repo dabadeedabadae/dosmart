@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Institution;
 use App\Models\Order;
 use App\Models\OrderDraft;
+use App\Models\Prisoner;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\PilotCheckout;
@@ -29,7 +30,41 @@ class PilotTest extends TestCase
     {
         $institution = Institution::create(['name' => 'Учреждение 1', 'city' => 'Алматы', 'is_active' => true]);
 
-        return ['prisoner_name' => 'Тестовый Получатель', 'institution_id' => $institution->id, 'contact_phone' => '+77001112233', 'delivery_type' => 'urgent', 'consent' => 1, 'expected_total' => 7500];
+        return ['prisoner_name' => 'Тестовый Получатель', 'relative_name' => 'Отправитель Тестовый', 'institution_id' => $institution->id, 'contact_phone' => '+77001112233', 'delivery_type' => 'standard', 'consent' => 1, 'expected_total' => 5500];
+    }
+
+    public function test_relative_sees_only_recipient_limit_by_full_name(): void
+    {
+        $draft = $this->draft();
+        $institution = Institution::create(['name' => 'Учреждение 1', 'city' => 'Алматы', 'is_active' => true]);
+        $prisoner = Prisoner::create(['full_name' => 'Тестов Арман Серикович', 'institution_id' => $institution->id,
+            'condition' => 'ordinary', 'parcel_code' => strtoupper(Str::random(24))]);
+        $prisoner->forceFill(['birth_date' => '1990-03-15', 'balance_minor' => 5_000_000])->save();
+        $url = '/o/'.$draft->code.'/recipient-limits';
+        $ask = fn (array $over = []) => $this->postJson($url, $over + ['institution_id' => $institution->id, 'prisoner_name' => 'тестов арман серикович']);
+
+        $this->get('/o/'.$draft->code)->assertOk()->assertDontSee('Дата рождения получателя')->assertDontSee('Код получателя')->assertDontSee('/family');
+        // Нормы передач не заданы — ничего не проверяем и не показываем.
+        $ask()->assertOk()->assertExactJson(['limited' => false]);
+
+        $institution->forceFill(['parcel_limits_mrp' => [2026 => ['ordinary' => 10, 'eased' => 15, 'strict' => 5, 'privileged' => 20], 2027 => ['ordinary' => 10, 'eased' => 15, 'strict' => 5, 'privileged' => 20]],
+            'parcel_mrp_rates' => [2026 => 4325, 2027 => 4325]])->save();
+        $ask()->assertOk()->assertExactJson(['limited' => true, 'found' => true, 'parcel_budget_minor' => 4_325_000, 'parcels_available' => null]);
+        $ask(['prisoner_name' => 'Тестов Арман'])->assertOk()->assertExactJson(['limited' => true, 'found' => false, 'namesakes' => false]);
+    }
+
+    public function test_only_standard_delivery_and_formatted_phone_are_accepted(): void
+    {
+        $draft = $this->draft();
+        $data = $this->details();
+        $data['delivery_type'] = 'urgent';
+        $this->post('/o/'.$draft->code, $data)->assertSessionHasErrors('delivery_type');
+        $this->assertDatabaseCount('orders', 0);
+        $data['delivery_type'] = 'standard';
+        $data['contact_phone'] = '+7 705 621 8748';
+        $this->post('/o/'.$draft->code, $data)->assertRedirect('/o/'.$draft->code.'/payment');
+        $this->assertSame('+77056218748', Order::first()->contact_phone);
+        $this->assertSame('3000.00', Order::first()->delivery_fee);
     }
 
     public function test_terminal_auth_random_code_and_idempotency(): void
@@ -63,8 +98,8 @@ class PilotTest extends TestCase
         $data['total'] = 1;
         $this->post('/o/'.$draft->code, $data)->assertRedirect('/o/'.$draft->code.'/payment');
         $order = Order::first();
-        $this->assertSame('7500.00', $order->total);
-        $this->assertSame('5000.00', $order->delivery_fee);
+        $this->assertSame('5500.00', $order->total);
+        $this->assertSame('3000.00', $order->delivery_fee);
         $this->assertNotNull($order->consented_at);
         $this->assertNull($order->customer_id);
         $this->post('/o/'.$draft->code, $data)->assertRedirect();
@@ -90,7 +125,7 @@ class PilotTest extends TestCase
         $this->assertSame('pending', $order->status);
         $this->assertNotSame('paid', $order->payment_status);
         $this->assertNull($order->paid_at);
-        $this->assertSame('7500.00', $order->total);
+        $this->assertSame('5500.00', $order->total);
         $this->assertNotNull($order->payment_reported_at);
         $count = $order->statusHistory()->count();
         $this->post('/o/'.$draft->code.'/payment-reported')->assertRedirect();
@@ -175,8 +210,8 @@ class PilotTest extends TestCase
         $this->patch($url, ['status' => 'refunded', 'refund_amount' => 1000, 'refund_verified' => 1, 'comment' => 'Частичный возврат'])->assertRedirect();
         $this->assertSame('1000.00', (string) $order->fresh()->refund_amount);
         $this->assertSame('refunded', $order->fresh()->payment_status);
-        $this->patch($url, ['status' => 'refunded', 'refund_amount' => 7500, 'refund_verified' => 1, 'comment' => 'Полный возврат'])->assertRedirect();
-        $this->assertSame('7500.00', (string) $order->fresh()->refund_amount);
+        $this->patch($url, ['status' => 'refunded', 'refund_amount' => 5500, 'refund_verified' => 1, 'comment' => 'Полный возврат'])->assertRedirect();
+        $this->assertSame('5500.00', (string) $order->fresh()->refund_amount);
     }
 
     public function test_request_id_conflict_terminal_fail_closed_and_staff_login(): void

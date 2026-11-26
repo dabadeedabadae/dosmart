@@ -15,3 +15,5 @@ database/*.sqlite
 .claude
 .DS_Store
 .phpunit.result.cache
+
+mobile

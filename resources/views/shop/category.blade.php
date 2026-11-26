@@ -24,11 +24,17 @@
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="m9 18 6-6-6-6"/>
             </svg>
-            {{ $category->name }}
+            {{ $category->path_name }}
         </div>
 
         <div class="section-title">{{ $category->name }}</div>
 
+        @if($category->parent)<a class="btn btn-ghost" style="margin-bottom:16px" href="{{ route('shop.category', $category->parent) }}">← {{ $category->parent->name }}</a>@endif
+        @if($subcategories->isNotEmpty())
+        <nav aria-label="Подкатегории" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        @foreach($subcategories as $child)<a class="btn btn-ghost" href="{{ route('shop.category', $child) }}">{{ $child->name }} →</a>@endforeach
+        </nav>
+        @endif
         @if($products->isNotEmpty())
         <div class="products-grid">
             @foreach($products as $product)

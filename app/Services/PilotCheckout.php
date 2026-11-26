@@ -77,20 +77,27 @@ class PilotCheckout
             }
             abort_if($draft->expires_at->isPast(), 410, 'Срок действия корзины истёк.');
             $quote = $this->quote($draft->items);
-            $fee = $data['delivery_type'] === 'urgent' ? 5000 : 3000;
+            if ($data['delivery_type'] !== 'standard') {
+                throw ValidationException::withMessages(['delivery_type' => 'Доступна доставка на следующий день за 3 000 ₸.']);
+            }
+            $fee = (float) config('pilot.delivery_fee', 3000);
             // Reject a stale total instead of silently changing the amount agreed by the customer.
             if ((int) round($data['expected_total'] * 100) !== (int) round(($quote['subtotal'] + $fee) * 100)) {
                 throw ValidationException::withMessages(['items' => 'Цена товаров изменилась. Обновите страницу и проверьте новую сумму.']);
             }
-            $institution = Institution::where('is_active', true)->findOrFail($data['institution_id']);
+            $institution = Institution::where('is_active', true)->lockForUpdate()->findOrFail($data['institution_id']);
             $order = Order::create([
+                'display_number' => app(OrderNumbers::class)->next($institution->id),
                 'order_number' => 'DOS-'.$draft->code, 'customer_id' => $customerId,
+                'squad_number' => $data['squad_number'] ?? null,
                 'prisoner_name' => $data['prisoner_name'], 'institution_id' => $institution->id,
                 'institution_name' => $institution->name, 'contact_phone' => $data['contact_phone'],
+                'relative_name' => $data['relative_name'] ?? null,
                 'subtotal' => $quote['subtotal'], 'delivery_fee' => $fee, 'total' => $quote['subtotal'] + $fee,
                 'delivery_type' => $data['delivery_type'], 'consented_at' => now(), 'consent_version' => config('pilot.consent_version'),
                 'status' => 'pending', 'payment_status' => 'unpaid',
             ]);
+            app(PrisonerAccounts::class)->reserveParcel($order, $institution);
             $order->items()->createMany($quote['items']);
             $order->statusHistory()->create(['status' => 'pending', 'comment' => 'Оформлен родственником. Согласие: '.config('pilot.consent_version')]);
             $draft->update(['order_id' => $order->id]);
